@@ -200,7 +200,7 @@ def get_cutoff_unmet_movies(api_url: str, api_key: str, api_timeout: int, monito
     radarr_logger.debug(f"Found {len(unmet_movies)} cutoff unmet movies (monitored_only={monitored_only}).")
     return unmet_movies
 
-def refresh_movie(api_url: str, api_key: str, api_timeout: int, movie_id: int) -> Optional[int]:
+def refresh_movie(api_url: str, api_key: str, api_timeout: int, movie_id: int, command_wait_delay: int = 5, command_wait_attempts: int = 12) -> Optional[int]:
     """
     Refresh a movie in Radarr.
     
@@ -209,6 +209,8 @@ def refresh_movie(api_url: str, api_key: str, api_timeout: int, movie_id: int) -
         api_key: The API key for authentication
         api_timeout: Timeout for the API request
         movie_id: The ID of the movie to refresh
+        command_wait_delay: Seconds to wait between command status checks
+        command_wait_attempts: Number of attempts to check command status
         
     Returns:
         The command ID if the refresh was triggered successfully, None otherwise
@@ -224,6 +226,20 @@ def refresh_movie(api_url: str, api_key: str, api_timeout: int, movie_id: int) -
     if response and 'id' in response:
         command_id = response['id']
         radarr_logger.debug(f"Triggered refresh for movie ID {movie_id}. Command ID: {command_id}")
+        
+        # Wait for command to complete if wait parameters are provided
+        if command_wait_delay > 0 and command_wait_attempts > 0:
+            command_status = wait_for_command(api_url, api_key, api_timeout, command_id, 
+                                             delay=command_wait_delay, 
+                                             max_attempts=command_wait_attempts)
+            if command_status:
+                radarr_logger.debug(f"Movie refresh command completed successfully for movie ID {movie_id}")
+                return command_id
+            else:
+                radarr_logger.warning(f"Timed out waiting for movie refresh command to complete for movie ID {movie_id}")
+                # Still return the command ID as it was triggered successfully
+                return command_id
+        
         return command_id
     else:
         radarr_logger.error(f"Failed to trigger refresh command for movie ID {movie_id}. Response: {response}")
@@ -289,3 +305,38 @@ def check_connection(api_url: str, api_key: str, api_timeout: int) -> bool:
     except Exception as e:
         radarr_logger.error(f"An unexpected error occurred during Radarr connection check: {e}")
         return False
+
+def wait_for_command(api_url: str, api_key: str, api_timeout: int, command_id: int, delay: int = 5, max_attempts: int = 12) -> bool:
+    """
+    Wait for a command to complete.
+    
+    Args:
+        api_url: The base URL of the Radarr API
+        api_key: The API key for authentication
+        api_timeout: Timeout for the API request
+        command_id: The ID of the command to wait for
+        delay: Seconds to wait between command status checks
+        max_attempts: Number of attempts to check command status
+        
+    Returns:
+        True if the command completed successfully, False otherwise
+    """
+    attempts = 0
+    while attempts < max_attempts:
+        response = arr_request(api_url, api_key, api_timeout, f"command/{command_id}")
+        if response and 'state' in response:
+            state = response['state']
+            if state == "completed":
+                return True
+            elif state == "failed":
+                radarr_logger.error(f"Command {command_id} failed.")
+                return False
+        else:
+            radarr_logger.error(f"Failed to retrieve command status for command {command_id}.")
+            return False
+        
+        attempts += 1
+        time.sleep(delay)
+    
+    radarr_logger.error(f"Timed out waiting for command {command_id} to complete.")
+    return False

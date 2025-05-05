@@ -250,11 +250,9 @@ def logs_stream():
                     log_files_to_follow = [(app_type, app_log)]
                     web_logger.debug(f"Following {app_type} log: {app_log}")
                 
-                # Also include system log for related messages
-                system_log = KNOWN_LOG_FILES.get('system')
-                if system_log:
-                    log_files_to_follow.append(('system', system_log))
-                    web_logger.debug(f"Also following system log for {app_type} messages")
+                # Remove system log inclusion for app-specific views to prevent mixed history
+                # This fixes the issue with logs from other apps showing up in app-specific views
+                # System log messages related to the specific app will still be shown in the system view
 
             if not log_files_to_follow:
                 web_logger.warning(f"No log files found for app type: {app_type}")
@@ -321,7 +319,13 @@ def logs_stream():
 
                         # Init position or handle truncation
                         if name not in positions or current_size < positions.get(name, 0):
-                            start_pos = max(0, current_size - 5120)
+                            # For app-specific views, don't load as much history to avoid confusion
+                            if app_type != 'all' and app_type != 'system':
+                                # Only read recent logs for app-specific views (1KB instead of 5KB)
+                                start_pos = max(0, current_size - 1024)
+                            else:
+                                # For 'all' and 'system' views, show more history
+                                start_pos = max(0, current_size - 5120)
                             web_logger.debug(f"Init position for {name}: {start_pos}")
                             positions[name] = start_pos
 
