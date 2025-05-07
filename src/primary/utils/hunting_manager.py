@@ -375,8 +375,10 @@ class HuntingManager:
                 entry_time = entry.get("date_time", 0)
                 seconds_elapsed = current_time - entry_time
                 
-                if seconds_elapsed < 60:
+                if seconds_elapsed < 1:
                     entry["how_long_ago"] = "Just now"
+                elif seconds_elapsed < 60:
+                    entry["how_long_ago"] = f"{seconds_elapsed} {'second' if seconds_elapsed == 1 else 'seconds'} ago"
                 elif seconds_elapsed < 3600:  # Less than an hour
                     minutes = int(seconds_elapsed / 60)
                     entry["how_long_ago"] = f"{minutes} {'minute' if minutes == 1 else 'minutes'} ago"
