@@ -80,33 +80,70 @@ def add_history_entry(app_type, entry_data):
     
     # Create the entry with timestamp
     timestamp = int(time.time())
+    
+    # Base fields common to all app types
     entry = {
-        # Base required fields
         "date_time": timestamp,
         "date_time_readable": datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S'),
         "processed_info": entry_data["name"],
         "id": entry_data["id"],
-        "instance_name": instance_name,  # Use the instance_name we extracted above
-        "operation_type": entry_data.get("operation_type", "missing"),  # Default to "missing" if not specified
-        "app_type": app_type,  # Include app_type in the entry for display in UI
-        "hunt_status": entry_data.get("hunt_status", "Not Tracked"),  # Add hunt status field
-        
-        # Additional metadata fields with default values
-        "quality": entry_data.get("quality", None),
-        "size_mb": entry_data.get("size_mb", None),
-        "protocol": entry_data.get("protocol", None),
-        "indexer": entry_data.get("indexer", None),
-        "release_group": entry_data.get("release_group", None),
-        "year": entry_data.get("year", None),
-        "imdb_id": entry_data.get("imdb_id", None),
-        "tmdb_id": entry_data.get("tmdb_id", None),
-        "tvdb_id": entry_data.get("tvdb_id", None),
-        "genres": entry_data.get("genres", []),
+        "instance_name": instance_name,
+        "operation_type": entry_data.get("operation_type", "missing"),
+        "app_type": app_type,
+        "hunt_status": entry_data.get("hunt_status", "Not Tracked"),
         "monitored": entry_data.get("monitored", None),
-        "last_check": entry_data.get("last_check", None),
-        "attempts": entry_data.get("attempts", 0),
-        "notes": entry_data.get("notes", None)
+        "how_long_ago": "Just now"  # This will be calculated when displayed in UI
     }
+    
+    # Add app-specific fields based on the app_type
+    if app_type == "radarr" or app_type == "whisparr" or app_type == "eros":
+        # Movie-specific fields
+        entry.update({
+            "quality": entry_data.get("quality", None),
+            "size_mb": entry_data.get("size_mb", None),
+            "protocol": entry_data.get("protocol", None), 
+            "year": entry_data.get("year", None)
+        })
+        # Only add IDs if they exist
+        if "imdb_id" in entry_data:
+            entry["imdb_id"] = entry_data["imdb_id"]
+        if "tmdb_id" in entry_data:
+            entry["tmdb_id"] = entry_data["tmdb_id"]
+            
+    elif app_type == "sonarr":
+        # Series-specific fields
+        entry.update({
+            "quality": entry_data.get("quality", None),
+            "size_mb": entry_data.get("size_mb", None),
+            "protocol": entry_data.get("protocol", None),
+            "season": entry_data.get("season", None),
+            "episode": entry_data.get("episode", None)
+        })
+        # Only add IDs if they exist
+        if "tvdb_id" in entry_data:
+            entry["tvdb_id"] = entry_data["tvdb_id"]
+            
+    elif app_type == "lidarr":
+        # Music-specific fields
+        entry.update({
+            "quality": entry_data.get("quality", None),
+            "size_mb": entry_data.get("size_mb", None),
+            "artist": entry_data.get("artist", None),
+            "album": entry_data.get("album", None)
+        })
+        
+    elif app_type == "readarr":
+        # Book-specific fields
+        entry.update({
+            "quality": entry_data.get("quality", None),
+            "size_mb": entry_data.get("size_mb", None),
+            "author": entry_data.get("author", None),
+            "book": entry_data.get("book", None)
+        })
+        
+    # Add indexer if provided (useful for all types)
+    if "indexer" in entry_data:
+        entry["indexer"] = entry_data["indexer"]
     
     history_file = get_history_file_path(app_type, instance_name)
     logger.debug(f"Writing to history file: {history_file}")
@@ -251,15 +288,16 @@ def format_time_ago(seconds):
     else:
         return f"{seconds} {'second' if seconds == 1 else 'seconds'} ago"
 
-def update_history_entry_status(app_type, instance_name, item_id, hunt_status):
+def update_history_entry_status(app_type, instance_name, item_id, hunt_status, **additional_fields):
     """
-    Update just the hunt status of an existing history entry, preserving the original timestamp
+    Update the hunt status and additional fields of an existing history entry, preserving the original timestamp
     
     Parameters:
     - app_type: str - The app type (sonarr, radarr, etc)
     - instance_name: str - Name of the instance
     - item_id: str/int - ID of the item to update
     - hunt_status: str - New hunt status to set
+    - additional_fields: dict - Additional fields to update (quality, size_mb, protocol, etc.)
     
     Returns:
     - bool - Success or failure
@@ -287,8 +325,14 @@ def update_history_entry_status(app_type, instance_name, item_id, hunt_status):
             updated = False
             for entry in history_data:
                 if str(entry.get("id", "")) == str(item_id):
-                    # Update just the hunt_status field
+                    # Update the hunt_status field
                     entry["hunt_status"] = hunt_status
+                    
+                    # Update additional fields if provided
+                    for field, value in additional_fields.items():
+                        if value is not None:  # Only update non-None values
+                            entry[field] = value
+                    
                     updated = True
             
             if updated:

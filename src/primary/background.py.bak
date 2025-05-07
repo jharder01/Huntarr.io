@@ -689,7 +689,7 @@ def process_radarr_hunting(manager, hunting_manager_stop_event):
                         entry_data["name"] = f"{title} ({year})"
                         
                         # Add the entry to history
-                        manager.add_history_entry("radarr", entry_data)
+                        add_history_entry("radarr", entry_data)
                         logger.info(f"[HUNTING] Created new history entry for movie ID {movie_id}: {hunt_status}")
                     
                     # Track movie in memory
@@ -701,8 +701,8 @@ def process_radarr_hunting(manager, hunting_manager_stop_event):
                         "instance_name": instance_name
                     }
                     
-                    # Add to tracking or update with correct parameter order (app_type, instance_name, item_data)
-                    manager.track_item("radarr", instance_name, movie_info)
+                    # Add to tracking or update
+                    manager.track_movie(movie_id, instance_name, movie_info)
                     logger.info(f"[HUNTING] Movie ID {movie_id} is already tracked for instance {instance_name}, status: {hunt_status}")
                     
                 except Exception as e:
@@ -861,7 +861,7 @@ def process_sonarr_hunting(manager, hunting_manager_stop_event):
                         entry_data["name"] = title
                         
                         # Add the entry to history
-                        manager.add_history_entry("sonarr", entry_data)
+                        add_history_entry("sonarr", entry_data)
                         logger.info(f"[HUNTING] Created new history entry for series ID {series_id}: {hunt_status}")
                     
                     # Track series in memory
@@ -873,8 +873,8 @@ def process_sonarr_hunting(manager, hunting_manager_stop_event):
                     }
                     
                     # Add to tracking or update
-                    # Using track_item with correct parameter order (app_type, instance_name, item_data)
-                    manager.track_item("sonarr", instance_name, series_info)
+                    # Note: Using track_movie method for now, could be renamed to track_item in the future for clarity
+                    manager.track_movie(series_id, instance_name, series_info)
                     logger.info(f"[HUNTING] Series ID {series_id} is now tracked for instance {instance_name}, status: {hunt_status}")
                     
                 except Exception as e:
@@ -1030,7 +1030,7 @@ def process_lidarr_hunting(manager, hunting_manager_stop_event):
                         entry_data["name"] = artist_name
                         
                         # Add the entry to history
-                        manager.add_history_entry("lidarr", entry_data)
+                        add_history_entry("lidarr", entry_data)
                         logger.info(f"[HUNTING] Created new history entry for artist ID {artist_id}: {hunt_status}")
                     
                     # Track artist in memory
@@ -1042,8 +1042,8 @@ def process_lidarr_hunting(manager, hunting_manager_stop_event):
                     }
                     
                     # Add to tracking or update
-                    # Using track_item with correct parameter order (app_type, instance_name, item_data)
-                    manager.track_item("lidarr", instance_name, artist_info)
+                    # Note: Using track_movie method for now, could be renamed to track_item in the future for clarity
+                    manager.track_movie(artist_id, instance_name, artist_info)
                     logger.info(f"[HUNTING] Artist ID {artist_id} is now tracked for instance {instance_name}, status: {hunt_status}")
                     
                 except Exception as e:
@@ -1200,7 +1200,7 @@ def process_readarr_hunting(manager, hunting_manager_stop_event):
                         entry_data["name"] = author_name
                         
                         # Add the entry to history
-                        manager.add_history_entry("readarr", entry_data)
+                        add_history_entry("readarr", entry_data)
                         logger.info(f"[HUNTING] Created new history entry for author ID {author_id}: {hunt_status}")
                     
                     # Track author in memory
@@ -1212,8 +1212,7 @@ def process_readarr_hunting(manager, hunting_manager_stop_event):
                     }
                     
                     # Add to tracking or update
-                    # Using track_item with correct parameter order (app_type, instance_name, item_data)
-                    manager.track_item("readarr", instance_name, author_info)
+                    manager.track_movie(author_id, instance_name, author_info)
                     logger.info(f"[HUNTING] Author ID {author_id} is now tracked for instance {instance_name}, status: {hunt_status}")
                     
                 except Exception as e:
@@ -1371,7 +1370,7 @@ def process_whisparr_hunting(manager, hunting_manager_stop_event):
                         entry_data["name"] = title
                         
                         # Add the entry to history
-                        manager.add_history_entry("whisparr", entry_data)
+                        add_history_entry("whisparr", entry_data)
                         logger.info(f"[HUNTING] Created new history entry for scene ID {movie_id}: {hunt_status}")
                     
                     # Track movie in memory
@@ -1383,7 +1382,7 @@ def process_whisparr_hunting(manager, hunting_manager_stop_event):
                     }
                     
                     # Add to tracking or update
-                    manager.track_item("whisparr", instance_name, movie_info)
+                    manager.track_movie(movie_id, instance_name, movie_info)
                     logger.info(f"[HUNTING] Scene ID {movie_id} is now tracked for instance {instance_name}, status: {hunt_status}")
                     
                 except Exception as e:
@@ -1552,7 +1551,7 @@ def process_eros_hunting(manager, hunting_manager_stop_event):
                         entry_data["name"] = title
                         
                         # Add the entry to history
-                        manager.add_history_entry("eros", entry_data)
+                        add_history_entry("eros", entry_data)
                         logger.info(f"[HUNTING] Created new history entry for scene ID {movie_id}: {hunt_status}")
                     
                     # Track movie in memory
@@ -1565,7 +1564,7 @@ def process_eros_hunting(manager, hunting_manager_stop_event):
                     }
                     
                     # Add to tracking or update
-                    manager.track_item("whisparr", instance_name, movie_info)
+                    manager.track_movie(movie_id, instance_name, movie_info)
                     logger.info(f"[HUNTING] Scene ID {movie_id} is now tracked for instance {instance_name}, status: {hunt_status}")
                     
                 except Exception as e:

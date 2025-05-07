@@ -159,6 +159,9 @@ ALL_APP_LOG_FILES = list(KNOWN_LOG_FILES.values()) # List of all individual log 
 hunting_manager = HuntingManager("/config")
 radarr_hunting_manager = RadarrHuntingManager(hunting_manager)
 
+# Make hunting_manager available to all routes
+app.config['HUNTING_MANAGER'] = hunting_manager
+
 @app.route('/')
 def home():
     # Get latest hunt statuses

@@ -25,8 +25,9 @@ def update_hunt_status(app_type, instance_name, item_id, item_data, queue_status
     """
     
     # First check if there's an existing history entry to preserve the original timestamp
-    from src.primary.history_manager import get_history
-    existing_entries = get_history(app_type)
+    from flask import current_app
+    hunting_manager = current_app.config['HUNTING_MANAGER']
+    existing_entries = hunting_manager.get_history(app_type)
     existing_entry = None
     
     # Find the existing entry for this item_id if it exists
@@ -84,8 +85,8 @@ def update_hunt_status(app_type, instance_name, item_id, item_data, queue_status
         if existing_entry:
             # We're just updating the hunt status, not creating a new history entry
             # This ensures timestamps remain based on original request time
-            from src.primary.history_manager import update_history_entry_status
-            update_history_entry_status(app_type, instance_name, item_id, hunt_status)
+            # Using the hunting_manager instance to update history entry status
+            hunting_manager.update_history_entry_status(app_type, instance_name, item_id, hunt_status)
             logger.info(f"[HUNTING] Updated existing history entry status for {app_type} ID {item_id}: {hunt_status}")
         else:
             # No existing entry found, create a new one

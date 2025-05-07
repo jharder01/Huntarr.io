@@ -3,18 +3,53 @@ import os
 import time
 import pathlib
 import logging
+import threading
+import sys
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any, Union
 
-# Create logger
+# Create an independent logger for hunting operations that doesn't rely on Flask
+def create_independent_logger():
+    """Create a logger that works regardless of Flask context"""
+    log_handler = logging.StreamHandler(sys.stdout)
+    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                                      datefmt='%Y-%m-%d %H:%M:%S')
+    log_handler.setFormatter(log_formatter)
+    
+    independent_logger = logging.getLogger("hunting_manager_independent")
+    independent_logger.setLevel(logging.INFO)
+    independent_logger.addHandler(log_handler)
+    independent_logger.propagate = False  # Don't propagate to parent loggers
+    
+    return independent_logger
+
+# Standard logger (may fail in background threads)
 logger = logging.getLogger("hunting_manager")
+# Independent logger (will work in any context)
+independent_logger = create_independent_logger()
+
+# Path will be /config/history in production
+HISTORY_BASE_PATH = pathlib.Path("/config/history")
+
+# Lock to prevent race conditions during file operations
+history_locks = {
+    "sonarr": threading.Lock(),
+    "radarr": threading.Lock(),
+    "lidarr": threading.Lock(),
+    "readarr": threading.Lock(),
+    "whisparr": threading.Lock(),
+    "eros": threading.Lock(),
+    "swaparr": threading.Lock()
+}
 
 class HuntingManager:
-    """The modernized HuntingManager that acts as a facade to the history and stateful management systems.
+    """Unified HuntingManager that combines hunting and history functionality.
     
-    This class no longer maintains its own state files or tracking directories.
-    Instead, it dynamically pulls data from /config/history via the history_manager
-    and integrates with the stateful_manager to check which IDs have been processed.
+    This class handles all aspects of hunting and history tracking:
+    1. Management of history files with app-specific metadata
+    2. Tracking hunt status and processed items
+    3. Providing statistics and recent activity information
+    4. Integration with the stateful_manager for processed IDs
     
     The field_mapper.py handles the actual data processing and structure.
     """
@@ -27,44 +62,447 @@ class HuntingManager:
         self.config_dir = config_dir
         self.history_dir = os.path.join(config_dir, "history")
         logger.info(f"HuntingManager initialized using history data from {self.history_dir}")
-
-    def track_movie(self, item_id: str, instance_name: str, movie_info: Dict):
-        """Track an item via the history manager.
+        # Ensure history directories exist
+        self.ensure_history_dir()
         
-        This is a no-op method since tracking is handled through history_manager
-        and processed_ids through stateful_manager.
+    def ensure_history_dir(self):
+        """Ensure the history directory exists with app-specific subdirectories"""
+        try:
+            # Create base directory
+            HISTORY_BASE_PATH.mkdir(exist_ok=True, parents=True)
+            
+            # Create app-specific directories
+            for app in history_locks.keys():
+                app_dir = HISTORY_BASE_PATH / app
+                app_dir.mkdir(exist_ok=True, parents=True)
+                        
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create history directory: {str(e)}")
+            return False
+    
+    def get_history_file_path(self, app_type: str, instance_name: Optional[str] = None) -> pathlib.Path:
+        """Get the appropriate history file path based on app type and instance name
         
         Args:
-            item_id: ID of the item to track
-            instance_name: Name of the app instance
-            movie_info: Dictionary of item information
+            app_type: Type of application (radarr, sonarr, etc.)
+            instance_name: Name of the instance, defaults to "Default"
+            
+        Returns:
+            Path to the history file
         """
-        # This is now a no-op method - all tracking is done via 
-        # history_manager (create_history_entry) and stateful_manager (add_processed_id)
-        pass
-
-    def update_item_status(self, app_name: str, instance_name: str, item_id: str, 
-                          new_status: str, debug_info: Optional[Dict] = None):
-        """Update the status of a tracked item via history_manager.
+        # If no instance name is provided, use "Default"
+        if instance_name is None:
+            instance_name = "Default"
         
-        This is a no-op method since status updates are handled through
-        the history_manager's update_history_entry_status method.
+        # Create safe filename from instance name
+        safe_instance_name = "".join([c if c.isalnum() else "_" for c in instance_name])
+        return HISTORY_BASE_PATH / app_type / f"{safe_instance_name}.json"
+
+    def add_history_entry(self, app_type: str, entry_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Add a new history entry
+        
+        Parameters:
+        - app_type: str - The app type (sonarr, radarr, etc)
+        - entry_data: dict with required fields:
+            - name: str - Name of processed content
+            - instance_name: str - Name of the instance
+            - id: str - ID of the processed content
+            
+        Returns:
+            The created entry or None if there was an error
+        """
+        # Use independent logger to guarantee logging works in any context
+        if not self.ensure_history_dir():
+            independent_logger.error("Could not ensure history directory exists")
+            return None
+        
+        if app_type not in history_locks:
+            independent_logger.error(f"Invalid app type: {app_type}")
+            return None
+        
+        required_fields = ["name", "instance_name", "id"]
+        for field in required_fields:
+            if field not in entry_data:
+                independent_logger.error(f"Missing required field: {field}")
+                return None
+        
+        # Log the instance name for debugging
+        instance_name = entry_data["instance_name"]
+        independent_logger.info(f"Adding history entry for {app_type} with instance_name: '{instance_name}'")
+        
+        # Create the entry with timestamp
+        timestamp = int(time.time())
+        
+        # Base fields common to all app types
+        entry = {
+            "date_time": timestamp,
+            "date_time_readable": datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S'),
+            "processed_info": entry_data["name"],
+            "id": entry_data["id"],
+            "instance_name": instance_name,
+            "operation_type": entry_data.get("operation_type", "missing"),
+            "app_type": app_type,
+            "hunt_status": entry_data.get("hunt_status", "Not Tracked"),
+            "monitored": entry_data.get("monitored", None),
+            "how_long_ago": "Just now"  # This will be calculated when displayed in UI
+        }
+        
+        # Add app-specific fields based on the app_type
+        if app_type == "radarr" or app_type == "whisparr" or app_type == "eros":
+            # Movie-specific fields
+            entry.update({
+                "quality": entry_data.get("quality", None),
+                "size_mb": entry_data.get("size_mb", None),
+                "protocol": entry_data.get("protocol", None),
+                "indexer": entry_data.get("indexer", None),
+                "release_group": entry_data.get("release_group", None),
+                "year": entry_data.get("year", None),
+                "tmdb_id": entry_data.get("tmdb_id", None),
+                "imdb_id": entry_data.get("imdb_id", None),
+            })
+        elif app_type == "sonarr":
+            # TV-specific fields
+            entry.update({
+                "quality": entry_data.get("quality", None),
+                "size_mb": entry_data.get("size_mb", None),
+                "protocol": entry_data.get("protocol", None),
+                "indexer": entry_data.get("indexer", None),
+                "release_group": entry_data.get("release_group", None),
+                "season": entry_data.get("season", None),
+                "episode": entry_data.get("episode", None),
+                "tvdb_id": entry_data.get("tvdb_id", None),
+            })
+        elif app_type == "lidarr":
+            # Music-specific fields
+            entry.update({
+                "quality": entry_data.get("quality", None),
+                "size_mb": entry_data.get("size_mb", None),
+                "protocol": entry_data.get("protocol", None),
+                "indexer": entry_data.get("indexer", None),
+                "artist": entry_data.get("artist", None),
+                "album": entry_data.get("album", None),
+                "release_date": entry_data.get("release_date", None),
+            })
+        elif app_type == "readarr":
+            # Book-specific fields
+            entry.update({
+                "quality": entry_data.get("quality", None),
+                "size_mb": entry_data.get("size_mb", None),
+                "protocol": entry_data.get("protocol", None),
+                "indexer": entry_data.get("indexer", None),
+                "author": entry_data.get("author", None),
+                "book": entry_data.get("book", None),
+                "release_date": entry_data.get("release_date", None),
+                "isbn": entry_data.get("isbn", None),
+            })
+            
+        # Write to history file
+        history_file = self.get_history_file_path(app_type, instance_name)
+        
+        # Create parent directory if it doesn't exist
+        history_file.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Use a lock to prevent race conditions
+        with history_locks[app_type]:
+            try:
+                entries = []
+                
+                # Read existing entries if file exists
+                if history_file.exists():
+                    with open(history_file, 'r') as f:
+                        entries = json.load(f)
+                
+                # Add new entry at the beginning
+                entries.insert(0, entry)
+                
+                # Write entries back to file
+                with open(history_file, 'w') as f:
+                    json.dump(entries, f, indent=2)
+                
+                # Use independent logger that doesn't rely on Flask application context
+                independent_logger.info(f"Added history entry for {app_type} ID: {entry['id']}, Status: {entry['hunt_status']}")
+                    
+                return entry
+            except Exception as e:
+                # Use independent logger for error logging
+                independent_logger.error(f"Error adding history entry: {str(e)}")
+                    
+                return None
+                
+    def update_history_entry_status(self, app_type: str, instance_name: str, item_id: str, 
+                                     new_status: str, additional_fields: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Update the status of an existing history entry
+        
+        Parameters:
+        - app_type: str - The app type (sonarr, radarr, etc)
+        - instance_name: str - Name of the instance
+        - item_id: str - ID of the history entry to update
+        - new_status: str - New status value
+        - additional_fields: dict - Additional fields to update in the entry
+        
+        Returns:
+            True if the update was successful, False otherwise
+        """
+        if not self.ensure_history_dir():
+            logger.error("Could not ensure history directory exists")
+            return False
+            
+        history_file = self.get_history_file_path(app_type, instance_name)
+        
+        if not history_file.exists():
+            logger.error(f"History file does not exist: {history_file}")
+            return False
+        
+        # Use a lock to prevent race conditions
+        with history_locks[app_type]:
+            try:
+                # Read existing entries
+                with open(history_file, 'r') as f:
+                    entries = json.load(f)
+                
+                # Find the entry to update
+                updated = False
+                for entry in entries:
+                    if str(entry.get("id")) == str(item_id):
+                        # Update the status
+                        entry["hunt_status"] = new_status
+                        
+                        # Update additional fields if provided
+                        if additional_fields:
+                            entry.update(additional_fields)
+                            
+                        updated = True
+                        break
+                
+                if updated:
+                    # Write back to file
+                    with open(history_file, 'w') as f:
+                        json.dump(entries, f, indent=2)
+                    logger.info(f"Updated hunt status for {app_type}-{instance_name} ID {item_id} to '{new_status}'")
+                    return True
+                else:
+                    logger.warning(f"Could not find history entry for {app_type}-{instance_name} ID {item_id}")
+                    return False
+            except Exception as e:
+                independent_logger.error(f"Error updating history entry: {str(e)}")
+                return False
+                
+    def track_item(self, app_type: str, instance_name: str, item_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Track an item and create a history entry for it
+        
+        This is a convenience method that maps to add_history_entry
         
         Args:
-            app_name: Type of app
+            app_type: Type of app (radarr, sonarr, etc.)
+            instance_name: Name of the app instance
+            item_data: Dictionary of item information
+            
+        Returns:
+            The created entry or None if there was an error
+        """
+        # Structure the data for add_history_entry
+        entry_data = {
+            "name": item_data.get("title", item_data.get("name", "Unknown")),
+            "instance_name": instance_name,
+            "id": item_data.get("id"),
+            # Include other fields from item_data
+            **item_data
+        }
+        
+        return self.add_history_entry(app_type, entry_data)
+        
+    def update_item_status(self, app_type: str, instance_name: str, item_id: str, 
+                           new_status: str, additional_fields: Optional[Dict[str, Any]] = None):
+        """Update the status of a tracked item
+        
+        This now maps directly to update_history_entry_status
+        
+        Args:
+            app_type: Type of app
             instance_name: Name of the app instance
             item_id: ID of the item
             new_status: New status value
-            debug_info: Optional debug information
+            additional_fields: Optional additional fields to update
+            
+        Returns:
+            True if successful, False otherwise
         """
-        # This is now a no-op method - status updates are handled via 
-        # history_manager (update_history_entry_status)
-        pass
-
+        return self.update_history_entry_status(app_type, instance_name, item_id, new_status, additional_fields)
+    
+    def get_history(self, app_type: str, instance_name: Optional[str] = None, 
+                   page: int = 1, page_size: int = 50) -> Dict[str, Any]:
+        """
+        Get the history entries for a specific app type and instance
+        
+        Parameters:
+        - app_type: str - The app type (sonarr, radarr, etc)
+        - instance_name: str - Optional name of the instance, if None will return entries for all instances
+        - page: int - Page number for pagination (1-based)
+        - page_size: int - Number of entries per page
+        
+        Returns:
+            Dictionary with pagination info and items:
+            {
+                "total": int - Total number of entries,
+                "page": int - Current page,
+                "page_size": int - Number of entries per page,
+                "total_pages": int - Total number of pages,
+                "items": list - List of history entries
+            }
+        """
+        if not self.ensure_history_dir():
+            logger.error("Could not ensure history directory exists")
+            return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
+        
+        # Check page and page_size parameters
+        if page < 1:
+            page = 1
+        if page_size < 1:
+            page_size = 1
+        if page_size > 1000:
+            page_size = 1000
+            
+        # Calculate start and end indices for pagination
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
+        # Get all history entries
+        all_entries = []
+        
+        try:
+            # List all history files for the app type
+            app_dir = HISTORY_BASE_PATH / app_type
+            if not app_dir.exists():
+                return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
+                
+            if instance_name is not None:
+                # Only look at specified instance
+                history_file = self.get_history_file_path(app_type, instance_name)
+                if history_file.exists():
+                    with open(history_file, 'r') as f:
+                        entries = json.load(f)
+                        all_entries.extend(entries)
+            else:
+                # Look at all instances
+                for file in app_dir.glob("*.json"):
+                    if file.is_file():
+                        try:
+                            with open(file, 'r') as f:
+                                entries = json.load(f)
+                                all_entries.extend(entries)
+                        except Exception as e:
+                            logger.error(f"Error reading history file {file}: {str(e)}")
+            
+            # Sort by timestamp (most recent first)
+            all_entries.sort(key=lambda x: x.get("date_time", 0), reverse=True)
+            
+            # Calculate total number of entries and pages
+            total = len(all_entries)
+            total_pages = (total + page_size - 1) // page_size
+            
+            # Get the entries for the current page
+            page_entries = all_entries[start_idx:end_idx]
+            
+            # Add "how_long_ago" field to each entry
+            current_time = time.time()
+            for entry in page_entries:
+                entry_time = entry.get("date_time", 0)
+                # Calculate how long ago in a human-readable format
+                seconds_ago = current_time - entry_time
+                if seconds_ago < 60:
+                    entry["how_long_ago"] = "Just now"
+                elif seconds_ago < 3600:  # Less than an hour
+                    minutes = int(seconds_ago / 60)
+                    entry["how_long_ago"] = f"{minutes} {'minute' if minutes == 1 else 'minutes'} ago"
+                elif seconds_ago < 86400:  # Less than a day
+                    hours = int(seconds_ago / 3600)
+                    entry["how_long_ago"] = f"{hours} {'hour' if hours == 1 else 'hours'} ago"
+                elif seconds_ago < 604800:  # Less than a week
+                    days = int(seconds_ago / 86400)
+                    entry["how_long_ago"] = f"{days} {'day' if days == 1 else 'days'} ago"
+                else:
+                    # More than a week, show the actual date
+                    entry["how_long_ago"] = datetime.fromtimestamp(entry_time).strftime('%Y-%m-%d')
+            
+            return {
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "items": page_entries
+            }
+        except Exception as e:
+            independent_logger.error(f"Error getting history: {str(e)}")
+            return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
+            
+    def clear_history(self, app_type: Optional[str] = None, instance_name: Optional[str] = None) -> bool:
+        """
+        Clear history entries
+        
+        Parameters:
+        - app_type: str - Optional app type to clear history for, if None will clear all app types
+        - instance_name: str - Optional instance name to clear history for, if None will clear all instances
+        
+        Returns:
+            True if successful, False otherwise
+        """
+        if not self.ensure_history_dir():
+            logger.error("Could not ensure history directory exists")
+            return False
+            
+        try:
+            if app_type is not None:
+                # Clear history for specific app type
+                if app_type not in history_locks:
+                    independent_logger.error("Invalid app type: {}".format(app_type))
+                    return False
+                    
+                app_dir = HISTORY_BASE_PATH / app_type
+                if not app_dir.exists():
+                    return True  # Nothing to clear
+                    
+                with history_locks[app_type]:
+                    if instance_name is not None:
+                        # Clear history for specific instance
+                        history_file = self.get_history_file_path(app_type, instance_name)
+                        if history_file.exists():
+                            # Write empty array to file
+                            with open(history_file, 'w') as f:
+                                json.dump([], f)
+                            logger.info(f"Cleared history for {app_type}-{instance_name}")
+                    else:
+                        # Clear history for all instances of this app type
+                        for file in app_dir.glob("*.json"):
+                            if file.is_file():
+                                # Write empty array to file
+                                with open(file, 'w') as f:
+                                    json.dump([], f)
+                        logger.info(f"Cleared history for all instances of {app_type}")
+            else:
+                # Clear history for all app types
+                for app_type in history_locks.keys():
+                    app_dir = HISTORY_BASE_PATH / app_type
+                    if app_dir.exists():
+                        with history_locks[app_type]:
+                            for file in app_dir.glob("*.json"):
+                                if file.is_file():
+                                    # Write empty array to file
+                                    with open(file, 'w') as f:
+                                        json.dump([], f)
+                logger.info("Cleared all history")
+                
+            return True
+        except Exception as e:
+            independent_logger.error(f"Error clearing history: {str(e)}")
+            return False
+    
     def get_latest_statuses(self, limit: int = 5) -> List[Dict]:
         """Get the latest hunt statuses directly from history files.
         
-        This now directly reads from the history directory to get the latest statuses.
+        This now uses the get_history method of this class to get the latest statuses.
         
         Args:
             limit: Maximum number of items to return
@@ -72,9 +510,6 @@ class HuntingManager:
         Returns:
             List of dictionaries with status information
         """
-        # Import in method to avoid circular imports
-        from src.primary.history_manager import get_history
-        
         # Get history entries for all app types
         app_types = ['radarr', 'sonarr', 'lidarr', 'readarr', 'whisparr', 'eros']
         all_history = []
@@ -82,14 +517,14 @@ class HuntingManager:
         for app_type in app_types:
             try:
                 # Get most recent entries for this app type
-                history = get_history(app_type, page=1, page_size=limit)
+                history = self.get_history(app_type, page=1, page_size=limit)
                 if history and 'items' in history:
                     all_history.extend(history['items'])
             except Exception as e:
-                print(f"Error getting history for {app_type}: {e}")
+                logger.error(f"Error getting history for {app_type}: {e}")
         
         # Sort by timestamp, most recent first
-        all_history.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+        all_history.sort(key=lambda x: x.get("date_time", 0), reverse=True)
         
         # Format for the expected output format
         result = []
@@ -97,19 +532,19 @@ class HuntingManager:
             result.append({
                 "app_type": entry.get("app_type", "unknown"),
                 "instance": entry.get("instance_name", "unknown"),
-                "id": entry.get("item_id", "unknown"),
-                "name": entry.get("name", entry.get("title", "Unknown")),
-                "status": entry.get("hunt_status", "Unknown"),
-                "last_updated": entry.get("timestamp", ""),
-                "requested_at": entry.get("timestamp", "")
+                "id": entry.get("id", "unknown"),
+                "name": entry.get("processed_info", "Unknown"),
+                "timestamp": entry.get("date_time", 0),
+                "action": entry.get("operation_type", "unknown"),
+                "status": entry.get("hunt_status", "Not Tracked")
             })
             
         return result
-
+            
     def cleanup_old_records(self):
         """Cleanup is no longer needed as the history_manager handles record retention.
         
         This is maintained as a no-op method for compatibility.
         """
-        # No longer needed - history retention is handled by history_manager
+        # No longer needed - history retention is handled internally
         pass

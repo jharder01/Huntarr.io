@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-from src.primary.history_manager import add_history_entry
+from flask import current_app
 from src.primary.utils.logger import get_logger
 
 logger = get_logger("history")
@@ -30,7 +30,9 @@ def log_processed_media(app_type, media_name, media_id, instance_name, operation
             "hunt_status": "Searching"  # Set initial hunt status to Searching
         }
         
-        result = add_history_entry(app_type, entry_data)
+        # Get the hunting manager instance from Flask app config
+        hunting_manager = current_app.config['HUNTING_MANAGER']
+        result = hunting_manager.add_history_entry(app_type, entry_data)
         if result:
             logger.info(f"Logged history entry for {app_type} - {instance_name}: {media_name} ({operation_type})")
             return True

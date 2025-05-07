@@ -305,23 +305,25 @@ APP_CONFIG = {
     }
 }
 
-def get_nested_value(data: Dict[str, Any], field_path: str) -> Any:
+def get_nested_value(data: Dict[str, Any], field_path: str, default=None) -> Any:
     """
     Extract a value from a nested dictionary using dot notation.
 
     Examples:
         get_nested_value({"a": {"b": {"c": 1}}}, "a.b.c") -> 1
         get_nested_value({"a": [{"b": 1}, {"b": 2}]}, "a[0].b") -> 1
+        get_nested_value({"a": {}}, "a.b.c", "default_value") -> "default_value"
 
     Args:
         data: The dictionary to extract from
         field_path: The path to the field, using dot notation
+        default: The default value to return if the path is not found (default: None)
 
     Returns:
-        The extracted value, or None if not found
+        The extracted value, or the default value if not found
     """
     if not data or not field_path:
-        return None
+        return default
 
     # Handle special comparison operators for boolean conversion
     if " > " in field_path:
@@ -331,7 +333,7 @@ def get_nested_value(data: Dict[str, Any], field_path: str) -> Any:
             threshold = int(value_part)
             return actual_value > threshold
         except (ValueError, TypeError):
-            return None
+            return default
 
     # Normal field navigation
     parts = field_path.split(".")
@@ -345,21 +347,21 @@ def get_nested_value(data: Dict[str, Any], field_path: str) -> Any:
 
             # Get the array
             if array_part not in current:
-                return None
+                return default
             array_data = current[array_part]
 
             # Get indexed item
             try:
                 index = int(index_part)
                 if not isinstance(array_data, list) or index >= len(array_data):
-                    return None
+                    return default
                 current = array_data[index]
             except (ValueError, IndexError):
-                return None
+                return default
         else:
             # Regular dictionary access
             if part not in current:
-                return None
+                return default
             current = current[part]
 
     return current

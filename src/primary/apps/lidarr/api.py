@@ -414,6 +414,24 @@ def get_command_status(api_url: str, api_key: str, api_timeout: int, command_id:
          lidarr_logger.error(f"Error getting Lidarr command status for ID {command_id}. Response: {response}")
          return None
 
-def get_artist_by_id(api_url: str, api_key: str, api_timeout: int, artist_id: int) -> Optional[Dict[str, Any]]:
+def get_artist_by_id(api_url: str, api_key: str, api_timeout: int, artist_id: int) -> Dict:
     """Get artist details by ID from Lidarr."""
     return arr_request(api_url, api_key, api_timeout, f"artist/{artist_id}")
+
+
+def get_album_by_artist_id(api_url: str, api_key: str, api_timeout: int, artist_id: int) -> List[Dict]:
+    """Get all albums for a specific artist ID from Lidarr.
+    
+    Args:
+        api_url: The base URL of the Lidarr API
+        api_key: The API key for authentication
+        api_timeout: Timeout for the API request
+        artist_id: The ID of the artist to get albums for
+        
+    Returns:
+        List of album dictionaries for the specified artist, or an empty list if none found
+    """
+    lidarr_logger.debug(f"Getting albums for artist ID: {artist_id}")
+    
+    # Use the existing get_albums function with artist_id parameter
+    return get_albums(api_url, api_key, api_timeout, artist_id=artist_id)

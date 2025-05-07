@@ -331,20 +331,38 @@ def book_search(book_ids: List[int], api_url: Optional[str] = None, api_key: Opt
     # The calling function expects the command object now.
     return response 
 
-def get_author_details(api_url: str, api_key: str, author_id: int, api_timeout: int = 120) -> Optional[Dict]:
-    """Fetches details for a specific author from the Readarr API."""
-    endpoint = f"{api_url}/api/v1/author/{author_id}"
-    headers = {'X-Api-Key': api_key}
+def get_author_by_id(api_url: str, api_key: str, author_id: int, api_timeout: int = 120):
+    """Get details for a specific author by ID.
+    
+    Args:
+        api_url: The Readarr API URL
+        api_key: The Readarr API key
+        author_id: The ID of the author to retrieve
+        api_timeout: Timeout for the API request in seconds
+        
+    Returns:
+        Author details dictionary or None if not found/error
+    """
     try:
-        response = requests.get(endpoint, headers=headers, timeout=api_timeout)
-        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
-        author_data = response.json()
-        logger.debug(f"Successfully fetched details for author ID {author_id}.")
-        return author_data
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error fetching author details for ID {author_id} from {endpoint}: {e}")
-        return None
+        # Ensure URL ends with trailing slash if needed
+        api_url = api_url.rstrip('/') + '/'
+        endpoint = f"api/v1/author/{author_id}"
+        response = arr_request(endpoint, api_url=api_url, api_key=api_key, api_timeout=api_timeout)
+        return response
     except Exception as e:
+        logger.error(f"Error getting author by ID {author_id}: {e}")
+        return None
+
+def get_author_details(api_url: str, api_key: str, author_id: int, api_timeout: int = 120):
+    """Fetches details for a specific author from the Readarr API."""
+    try:
+        # Ensure URL ends with trailing slash if needed
+        api_url = api_url.rstrip('/') + '/'
+        endpoint = f"api/v1/author/{author_id}"
+        response = arr_request(endpoint, api_url=api_url, api_key=api_key, api_timeout=api_timeout)
+        return response
+    except Exception as e:
+        logger.error(f"Error getting author details: {e}")
         logger.error(f"An unexpected error occurred fetching author details for ID {author_id}: {e}")
         return None
 
