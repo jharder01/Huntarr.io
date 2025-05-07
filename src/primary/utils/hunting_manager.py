@@ -100,28 +100,13 @@ class HuntingManager:
         return HISTORY_BASE_PATH / app_type / f"{safe_instance_name}.json"
 
     def add_history_entry(self, app_type: str, entry_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """
-        Add a new history entry
-        
-        Parameters:
-        - app_type: str - The app type (sonarr, radarr, etc)
-        - entry_data: dict with required fields:
-            - name: str - Name of processed content
-            - instance_name: str - Name of the instance
-            - id: str - ID of the processed content
-            
-        Returns:
-            The created entry or None if there was an error
-        """
-        # Use independent logger to guarantee logging works in any context
-        if not self.ensure_history_dir():
-            independent_logger.error("Could not ensure history directory exists")
-            return None
-        
+        """Add a history entry to the history file."""
+        # Validate app type
         if app_type not in history_locks:
             independent_logger.error(f"Invalid app type: {app_type}")
             return None
         
+        # Check required fields
         required_fields = ["name", "instance_name", "id"]
         for field in required_fields:
             if field not in entry_data:
@@ -133,8 +118,43 @@ class HuntingManager:
         independent_logger.info(f"Adding history entry for {app_type} with instance_name: '{instance_name}'")
         
         # Create the entry with timestamp
-        timestamp = int(time.time())
+        # Calculate timestamp based on when the entry was first requested by Huntarr
+        # If there's a provided timestamp, use that; otherwise use current time
+        if "timestamp" in entry_data and entry_data["timestamp"]:
+            timestamp = int(entry_data["timestamp"])
+        else:
+            timestamp = int(time.time())
+            
+        # Calculate the human-readable "how_long_ago" value based on the entry date
+        # rather than just using "Just now" for everything
+        entry_time = timestamp
+        seconds_elapsed = 0  # For brand new entries
         
+        if "original_date" in entry_data and entry_data["original_date"]:
+            # If there's an original date from when the entry was first created
+            try:
+                original_time = int(entry_data["original_date"])
+                seconds_elapsed = timestamp - original_time
+            except (ValueError, TypeError):
+                # If there's an error parsing the original date, just use 0
+                seconds_elapsed = 0
+        
+        # Calculate how_long_ago based on seconds elapsed
+        if seconds_elapsed < 60:
+            how_long_ago = "Just now"
+        elif seconds_elapsed < 3600:  # Less than an hour
+            minutes = int(seconds_elapsed / 60)
+            how_long_ago = f"{minutes} {'minute' if minutes == 1 else 'minutes'} ago"
+        elif seconds_elapsed < 86400:  # Less than a day
+            hours = int(seconds_elapsed / 3600)
+            how_long_ago = f"{hours} {'hour' if hours == 1 else 'hours'} ago"
+        elif seconds_elapsed < 604800:  # Less than a week
+            days = int(seconds_elapsed / 86400)
+            how_long_ago = f"{days} {'day' if days == 1 else 'days'} ago"
+        else:
+            # More than a week, show the actual date
+            how_long_ago = datetime.fromtimestamp(entry_time).strftime('%Y-%m-%d')
+            
         # Base fields common to all app types
         entry = {
             "date_time": timestamp,
@@ -146,7 +166,7 @@ class HuntingManager:
             "app_type": app_type,
             "hunt_status": entry_data.get("hunt_status", "Not Tracked"),
             "monitored": entry_data.get("monitored", None),
-            "how_long_ago": "Just now"  # This will be calculated when displayed in UI
+            "how_long_ago": entry_data.get("how_long_ago", how_long_ago)  # Use calculated value or provided value
         }
         
         # Add app-specific fields based on the app_type
@@ -406,26 +426,8 @@ class HuntingManager:
             # Get the entries for the current page
             page_entries = all_entries[start_idx:end_idx]
             
-            # Add "how_long_ago" field to each entry
-            current_time = time.time()
-            for entry in page_entries:
-                entry_time = entry.get("date_time", 0)
-                # Calculate how long ago in a human-readable format
-                seconds_ago = current_time - entry_time
-                if seconds_ago < 60:
-                    entry["how_long_ago"] = "Just now"
-                elif seconds_ago < 3600:  # Less than an hour
-                    minutes = int(seconds_ago / 60)
-                    entry["how_long_ago"] = f"{minutes} {'minute' if minutes == 1 else 'minutes'} ago"
-                elif seconds_ago < 86400:  # Less than a day
-                    hours = int(seconds_ago / 3600)
-                    entry["how_long_ago"] = f"{hours} {'hour' if hours == 1 else 'hours'} ago"
-                elif seconds_ago < 604800:  # Less than a week
-                    days = int(seconds_ago / 86400)
-                    entry["how_long_ago"] = f"{days} {'day' if days == 1 else 'days'} ago"
-                else:
-                    # More than a week, show the actual date
-                    entry["how_long_ago"] = datetime.fromtimestamp(entry_time).strftime('%Y-%m-%d')
+            # The how_long_ago field is now permanently set at entry creation time
+            # and is not recalculated here
             
             return {
                 "total": total,

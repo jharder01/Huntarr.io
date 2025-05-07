@@ -252,8 +252,8 @@ const historyModule = {
             row.innerHTML = `
                 <td>
                     <div class="title-with-info">
+                        <span class="info-badge hide-on-mobile" title="View full details">info</span>
                         ${this.escapeHtml(entry.processed_info)}
-                        <span class="info-badge" title="View full details">info</span>
                     </div>
                 </td>
                 <td>${this.formatHuntStatus(entry.hunt_status)}</td>

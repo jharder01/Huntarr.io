@@ -1,0 +1,21 @@
+/* Responsive CSS for Huntarr */
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+    /* Hide info badges on mobile */
+    .hide-on-mobile {
+        display: none !important;
+    }
+    
+    /* Make tooltip full width on mobile */
+    .history-tooltip {
+        max-width: 90vw !important;
+        left: 5vw !important;
+        right: 5vw !important;
+    }
+    
+    /* Stack tooltip content vertically on mobile */
+    .tooltip-table {
+        grid-template-columns: 1fr !important;
+    }
+}
