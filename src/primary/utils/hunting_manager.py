@@ -369,7 +369,21 @@ class HuntingManager:
             # Get the entries for the current page
             page_entries = all_entries[start_idx:end_idx]
             
-            # Calculate how_long_ago for each entry
+            # Time difference calculation for "how_long_ago" field
+            # This format is specifically designed to show precise timing for recent entries
+            # and gradually become less precise for older entries:
+            # - < 1 second: "Just now"
+            # - 1-59 seconds: "X seconds ago"
+            # - 1-59 minutes: "X minutes ago"
+            # - 1-23 hours: "X hours ago"
+            # - 1-6 days: "X days ago"
+            # - > 1 week: "YYYY-MM-DD"
+            #
+            # IMPORTANT: This format should be maintained as it provides optimal user experience:
+            # - Shows precise timing for recent entries (seconds) to help users track immediate actions
+            # - Uses appropriate units for different time ranges
+            # - Switches to date format for entries older than a week
+            # - Properly handles singular/plural forms
             current_time = int(time.time())
             for entry in page_entries:
                 entry_time = entry.get("date_time", 0)
