@@ -484,9 +484,21 @@ def create_history_entry(app_type: str, instance_name: str, item_id: str,
     if file_config and file_data:
         file_endpoint = file_config.get("endpoint")
         if file_endpoint and file_endpoint in api_fields:
+            # Extract quality information (special handling)
+            if "quality" in file_data:
+                quality_name = get_nested_value(file_data, "quality.quality.name")
+                if quality_name:
+                    entry["quality"] = quality_name
+                
+            # Extract size information (convert to MB)
+            if "size" in file_data:
+                size_mb = round(file_data.get("size", 0) / (1024 * 1024), 2)
+                entry["size_mb"] = size_mb
+                
+            # Add other file fields
             for field in api_fields[file_endpoint]:
-                if field in file_data:
-                    entry[f"file_{field}"] = file_data[field]
+                if field not in ["quality", "size"] and field in file_data:
+                    entry[field] = file_data[field]
     
     # Add queue data
     if queue_data:
@@ -498,10 +510,27 @@ def create_history_entry(app_type: str, instance_name: str, item_id: str,
             # Find matching queue item
             for queue_item in queue_data:
                 if queue_item.get(match_field) == int(item_id):
+                    # Extract important fields directly without prefixes
+                    if "protocol" in queue_item:
+                        entry["protocol"] = queue_item["protocol"]
+                    if "indexer" in queue_item:
+                        entry["indexer"] = queue_item["indexer"]
+                    
+                    # For Radarr, extract release group if available
+                    if app_type in ["radarr", "whisparr", "eros"] and "title" in queue_item:
+                        # Try to extract release group from the title
+                        title = queue_item.get("title", "")
+                        if "-" in title:
+                            # Very basic release group extraction
+                            potential_group = title.split("-")[-1].strip()
+                            if potential_group:
+                                entry["release_group"] = potential_group
+                    
+                    # Add other queue fields
                     if queue_endpoint and queue_endpoint in api_fields:
                         for field in api_fields[queue_endpoint]:
-                            if field in queue_item:
-                                entry[f"queue_{field}"] = queue_item[field]
+                            if field not in ["protocol", "indexer"] and field in queue_item:
+                                entry[field] = queue_item[field]
                     entry["in_queue"] = True
                     break
             else:
