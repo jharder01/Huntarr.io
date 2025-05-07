@@ -447,7 +447,7 @@ const historyModule = {
         }
     },
     
-    // Show JSON tooltip
+    // Show JSON tooltip with sticky behavior
     showJsonTooltip: function(event, row) {
         const tooltip = document.getElementById('json-tooltip');
         if (!tooltip || !row.dataset.fullJson) return;
@@ -456,45 +456,98 @@ const historyModule = {
             // Parse JSON data
             const jsonData = JSON.parse(row.dataset.fullJson);
             
-            // Format JSON with syntax highlighting
-            const formattedJson = this.formatJsonForDisplay(jsonData);
+            // Create structured HTML with a close button
+            const formattedHtml = `
+                <div class="tooltip-close-btn">&times;</div>
+                ${this.createStructuredTooltip(jsonData)}
+            `;
             
             // Set tooltip content
-            tooltip.innerHTML = formattedJson;
+            tooltip.innerHTML = formattedHtml;
+            tooltip.className = 'history-tooltip';
             
-            // Position tooltip near cursor
-            const x = event.clientX + 15;
-            let y = event.clientY + 15;
-            
-            // Check if tooltip would go off screen and adjust accordingly
-            const rightEdge = x + tooltip.offsetWidth;
-            const bottomEdge = y + tooltip.offsetHeight;
-            
-            if (rightEdge > window.innerWidth) {
-                tooltip.style.left = (x - tooltip.offsetWidth) + 'px';
-            } else {
-                tooltip.style.left = x + 'px';
-            }
-            
-            if (bottomEdge > window.innerHeight) {
-                tooltip.style.top = (y - tooltip.offsetHeight) + 'px';
-            } else {
-                tooltip.style.top = y + 'px';
-            }
-            
-            // Show tooltip
+            // First, make tooltip visible but off-screen to measure its dimensions
             tooltip.style.display = 'block';
+            tooltip.style.left = '-9999px';
+            tooltip.style.top = '0px';
+            
+            // Get dimensions after rendering content
+            const tooltipHeight = tooltip.offsetHeight;
+            const tooltipWidth = tooltip.offsetWidth;
+            
+            // Calculate available space in all directions
+            const spaceRight = window.innerWidth - event.clientX - 15;
+            const spaceLeft = event.clientX - 15;
+            const spaceBelow = window.innerHeight - event.clientY - 15;
+            const spaceAbove = event.clientY - 15;
+            
+            // Determine best position based on available space
+            let posX, posY;
+            
+            // Horizontal positioning
+            if (tooltipWidth <= spaceRight) {
+                // Enough space to the right
+                posX = event.clientX + 15;
+            } else if (tooltipWidth <= spaceLeft) {
+                // Not enough space to the right, but enough to the left
+                posX = event.clientX - tooltipWidth - 15;
+            } else {
+                // Not enough space on either side, center horizontally
+                posX = Math.max(10, (window.innerWidth - tooltipWidth) / 2);
+            }
+            
+            // Vertical positioning
+            if (tooltipHeight <= spaceBelow) {
+                // Enough space below
+                posY = event.clientY + 15;
+            } else if (tooltipHeight <= spaceAbove) {
+                // Not enough space below, but enough above
+                posY = event.clientY - tooltipHeight - 15;
+            } else {
+                // Not enough space either way, position at top of screen with small margin
+                posY = 10;
+            }
+            
+            // Apply final position
+            tooltip.style.left = posX + 'px';
+            tooltip.style.top = posY + 'px';
+            
+            // If the tooltip is too tall for the viewport, apply max-height
+            const maxHeight = window.innerHeight - 20; // 10px margin top and bottom
+            if (tooltipHeight > maxHeight) {
+                tooltip.style.maxHeight = maxHeight + 'px';
+            }
+            
+            // Add click event to close button
+            const closeBtn = tooltip.querySelector('.tooltip-close-btn');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    tooltip.style.display = 'none';
+                });
+            }
+            
+            // Add click event to document to close when clicking outside tooltip
+            const closeOnClickOutside = (e) => {
+                if (!tooltip.contains(e.target) && e.target !== row) {
+                    tooltip.style.display = 'none';
+                    document.removeEventListener('click', closeOnClickOutside);
+                }
+            };
+            
+            // Add the event listener after a small delay to avoid immediate closing
+            setTimeout(() => {
+                document.addEventListener('click', closeOnClickOutside);
+            }, 100);
+            
         } catch (error) {
-            console.error('Error parsing JSON for tooltip:', error);
+            console.error('Error displaying tooltip:', error);
         }
     },
     
     // Hide JSON tooltip
     hideJsonTooltip: function() {
-        const tooltip = document.getElementById('json-tooltip');
-        if (tooltip) {
-            tooltip.style.display = 'none';
-        }
+        // This is now handled with the sticky/pinned approach
+        // Only hide when clicking outside or on a close button
     },
     
     // Toggle JSON tooltip on click
@@ -512,21 +565,217 @@ const historyModule = {
         this.showJsonTooltip(event, row);
     },
     
-    // Format JSON with syntax highlighting
-    formatJsonForDisplay: function(obj) {
-        // Convert to formatted string with 2-space indentation
-        const jsonString = JSON.stringify(obj, null, 2);
+    // Create structured, organized tooltip HTML with two columns
+    createStructuredTooltip: function(obj) {
+        // Create field groupings for better organization
+        const groups = {
+            'basicLeft': ['processed_info', 'id', 'hunt_status'],
+            'basicRight': ['operation_type', 'monitored'],
+            'timingLeft': ['date_time_readable'],
+            'timingRight': ['how_long_ago'],
+            'instanceLeft': ['app_type'],
+            'instanceRight': ['instance_name'],
+            'mediaLeft': ['year', 'imdb_id', 'tmdb_id'],
+            'mediaRight': ['episode', 'season', 'tvdb_id'],
+            'detailsLeft': ['quality', 'protocol', 'release_group'],
+            'detailsRight': ['size_mb', 'indexer']
+        };
         
-        // Add syntax highlighting by replacing with HTML
-        return jsonString
+        // Track which fields we've already displayed
+        const displayedFields = new Set();
+        
+        // Build HTML with title
+        let html = `<div class="tooltip-title">${this.escapeHtml(obj.processed_info || 'Item Details')}</div>`;
+        html += '<div class="tooltip-table">';
+        
+        // Function to add a row
+        const addRow = (key, value) => {
+            if (displayedFields.has(key)) return; // Skip if already displayed
+            displayedFields.add(key);
+            
+            // Format the label (convert snake_case to Title Case)
+            const label = key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+            
+            // Handle null values and formatting
+            let formattedValue = '';
+            let valueClass = '';
+            
+            if (value === null || value === undefined) {
+                formattedValue = 'Not available';
+                valueClass = 'null';
+            } else if (typeof value === 'boolean') {
+                formattedValue = value ? 'Yes' : 'No';
+            } else if (key === 'size_mb' && value) {
+                formattedValue = `${value} MB`;
+            } else {
+                formattedValue = this.escapeHtml(String(value));
+            }
+            
+            return `
+                <div class="tooltip-row">
+                    <div class="tooltip-label">${label}</div>
+                    <div class="tooltip-value ${valueClass}">${formattedValue}</div>
+                </div>
+            `;
+        };
+        
+        // Function to add a section of fields
+        const addSection = (title, leftFields, rightFields) => {
+            // Only add section if at least one field exists with data
+            const hasLeftData = leftFields.some(f => f in obj);
+            const hasRightData = rightFields.some(f => f in obj); 
+            
+            if (!hasLeftData && !hasRightData) return '';
+            
+            let leftHtml = `<div class="tooltip-section-container">
+                            <div class="tooltip-section">${title}</div>`;
+            
+            leftFields.forEach(field => {
+                if (field in obj) {
+                    leftHtml += addRow(field, obj[field]);
+                }
+            });
+            
+            leftHtml += `</div>`;
+            
+            let rightHtml = `<div class="tooltip-section-container">`;
+            
+            // Add a hidden section header for the right column to align content
+            rightHtml += `<div class="tooltip-section" style="visibility: hidden">${title}</div>`;
+            
+            rightFields.forEach(field => {
+                if (field in obj) {
+                    rightHtml += addRow(field, obj[field]);
+                }
+            });
+            
+            rightHtml += `</div>`;
+            
+            return [leftHtml, rightHtml];
+        };
+        
+        // Add sections in a balanced two-column layout
+        // Column 1
+        html += '<div class="tooltip-column">';
+        
+        // Basic Information
+        const [basicLeftHtml, basicRightHtml] = addSection('Basic Information', 
+                                                         groups.basicLeft, 
+                                                         groups.basicRight);
+        html += basicLeftHtml;
+        
+        // Timing Information
+        const [timingLeftHtml, timingRightHtml] = addSection('Timing', 
+                                                          groups.timingLeft, 
+                                                          groups.timingRight);
+        html += timingLeftHtml;
+        
+        // Instance Information
+        const [instanceLeftHtml, instanceRightHtml] = addSection('Instance', 
+                                                             groups.instanceLeft, 
+                                                             groups.instanceRight);
+        html += instanceLeftHtml;
+        
+        html += '</div>';
+        
+        // Column 2
+        html += '<div class="tooltip-column">';
+        
+        // Add the right side of each section
+        html += basicRightHtml;
+        html += timingRightHtml;
+        html += instanceRightHtml;
+        
+        html += '</div>';
+        
+        // Continue with additional sections if they have data
+        const mediaHasData = [...groups.mediaLeft, ...groups.mediaRight].some(f => f in obj && obj[f] !== null);
+        const detailsHasData = [...groups.detailsLeft, ...groups.detailsRight].some(f => f in obj && obj[f] !== null);
+        
+        if (mediaHasData || detailsHasData) {
+            html += '</div>'; // Close existing table
+            html += '<div class="tooltip-table">'; // Start new table for additional sections
+            
+            // Column 1
+            html += '<div class="tooltip-column">';
+            
+            // Media Information if exists
+            if (mediaHasData) {
+                const [mediaLeftHtml, mediaRightHtml] = addSection('Media Information',
+                                                                groups.mediaLeft,
+                                                                groups.mediaRight);
+                html += mediaLeftHtml;
+            }
+            
+            // Download Details if exists
+            if (detailsHasData) {
+                const [detailsLeftHtml, detailsRightHtml] = addSection('Download Details',
+                                                                     groups.detailsLeft,
+                                                                     groups.detailsRight);
+                html += detailsLeftHtml;
+            }
+            
+            html += '</div>';
+            
+            // Column 2
+            html += '<div class="tooltip-column">';
+            
+            // Add the right side of the media section
+            if (mediaHasData) {
+                const [, mediaRightHtml] = addSection('Media Information',
+                                                    groups.mediaLeft,
+                                                    groups.mediaRight);
+                html += mediaRightHtml;
+            }
+            
+            // Add the right side of the details section
+            if (detailsHasData) {
+                const [, detailsRightHtml] = addSection('Download Details',
+                                                       groups.detailsLeft,
+                                                       groups.detailsRight);
+                html += detailsRightHtml;
+            }
+            
+            html += '</div>';
+        }
+        
+        // Add any remaining fields not already displayed
+        const remainingFields = Object.keys(obj).filter(key => !displayedFields.has(key));
+        if (remainingFields.length > 0) {
+            html += '</div>'; // Close existing table
+            html += '<div class="tooltip-table">'; // Start new table for remaining fields
+            
+            // Split remaining fields into left and right columns
+            const mid = Math.ceil(remainingFields.length / 2);
+            const leftRemainingFields = remainingFields.slice(0, mid);
+            const rightRemainingFields = remainingFields.slice(mid);
+            
+            const [additionalLeftHtml, additionalRightHtml] = addSection('Additional Information',
+                                                                       leftRemainingFields,
+                                                                       rightRemainingFields);
+            
+            html += '<div class="tooltip-column">';
+            html += additionalLeftHtml;
+            html += '</div>';
+            
+            html += '<div class="tooltip-column">';
+            html += additionalRightHtml;
+            html += '</div>';
+        }
+        
+        html += '</div>'; // Close final table
+        return html;
+    },
+    
+    // Helper to safely escape HTML
+    escapeHtml: function(text) {
+        if (text === null || text === undefined) return '';
+        return String(text)
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
-            .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:') // Keys
-            .replace(/: "([^"]+)"/g, ': <span class="json-string">"$1"</span>') // String values
-            .replace(/: ([0-9]+)/g, ': <span class="json-number">$1</span>') // Number values
-            .replace(/: (true|false)/g, ': <span class="json-boolean">$1</span>') // Boolean values
-            .replace(/: null/g, ': <span class="json-null">null</span>'); // Null values
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
     }
 };
 

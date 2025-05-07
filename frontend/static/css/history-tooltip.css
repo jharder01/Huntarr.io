@@ -1,0 +1,97 @@
+/* Custom styling for the improved history tooltips */
+.history-tooltip {
+    position: absolute;
+    z-index: 1000;
+    background-color: #1e2130;
+    border: 1px solid #3a4157;
+    border-radius: 6px;
+    padding: 12px;
+    max-width: 600px; /* Wider to accommodate two columns */
+    max-height: 85vh; /* Limit height to 85% of viewport height */
+    overflow-y: auto; /* Add scrolling only when needed */
+    box-shadow: 0 2px 15px rgba(0, 0, 0, 0.4);
+    color: #eef1f7;
+    font-size: 13px;
+}
+
+.tooltip-title {
+    font-size: 15px;
+    font-weight: bold;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #3a4157;
+    color: #add8e6;
+}
+
+.tooltip-table {
+    width: 100%;
+    border-collapse: collapse;
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* Two equal columns */
+    grid-gap: 10px;
+}
+
+.tooltip-section-container {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid #2c3242;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+.tooltip-section-container:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.tooltip-row {
+    display: flex;
+    padding: 4px 0;
+}
+
+.tooltip-label {
+    width: 45%;
+    padding: 2px 0;
+    color: #a4b1cd;
+    vertical-align: top;
+    font-weight: 500;
+}
+
+.tooltip-value {
+    width: 55%;
+    padding: 2px 0;
+    word-break: break-word;
+}
+
+.tooltip-value.null {
+    color: #696e79;
+    font-style: italic;
+}
+
+.tooltip-section {
+    margin-bottom: 6px;
+    font-weight: bold;
+    color: #add8e6;
+}
+
+.tooltip-close-btn {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #a4b1cd;
+    cursor: pointer;
+    transition: color 0.2s;
+    width: 20px;
+    height: 20px;
+    text-align: center;
+    line-height: 20px;
+    border-radius: 50%;
+}
+
+.tooltip-close-btn:hover {
+    color: #ffffff;
+    background-color: rgba(255, 255, 255, 0.1);
+}
