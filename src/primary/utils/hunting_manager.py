@@ -118,43 +118,8 @@ class HuntingManager:
         independent_logger.info(f"Adding history entry for {app_type} with instance_name: '{instance_name}'")
         
         # Create the entry with timestamp
-        # Calculate timestamp based on when the entry was first requested by Huntarr
-        # If there's a provided timestamp, use that; otherwise use current time
-        if "timestamp" in entry_data and entry_data["timestamp"]:
-            timestamp = int(entry_data["timestamp"])
-        else:
-            timestamp = int(time.time())
-            
-        # Calculate the human-readable "how_long_ago" value based on the entry date
-        # rather than just using "Just now" for everything
-        entry_time = timestamp
-        seconds_elapsed = 0  # For brand new entries
+        timestamp = int(time.time())
         
-        if "original_date" in entry_data and entry_data["original_date"]:
-            # If there's an original date from when the entry was first created
-            try:
-                original_time = int(entry_data["original_date"])
-                seconds_elapsed = timestamp - original_time
-            except (ValueError, TypeError):
-                # If there's an error parsing the original date, just use 0
-                seconds_elapsed = 0
-        
-        # Calculate how_long_ago based on seconds elapsed
-        if seconds_elapsed < 60:
-            how_long_ago = "Just now"
-        elif seconds_elapsed < 3600:  # Less than an hour
-            minutes = int(seconds_elapsed / 60)
-            how_long_ago = f"{minutes} {'minute' if minutes == 1 else 'minutes'} ago"
-        elif seconds_elapsed < 86400:  # Less than a day
-            hours = int(seconds_elapsed / 3600)
-            how_long_ago = f"{hours} {'hour' if hours == 1 else 'hours'} ago"
-        elif seconds_elapsed < 604800:  # Less than a week
-            days = int(seconds_elapsed / 86400)
-            how_long_ago = f"{days} {'day' if days == 1 else 'days'} ago"
-        else:
-            # More than a week, show the actual date
-            how_long_ago = datetime.fromtimestamp(entry_time).strftime('%Y-%m-%d')
-            
         # Base fields common to all app types
         entry = {
             "date_time": timestamp,
@@ -165,8 +130,7 @@ class HuntingManager:
             "operation_type": entry_data.get("operation_type", "missing"),
             "app_type": app_type,
             "hunt_status": entry_data.get("hunt_status", "Not Tracked"),
-            "monitored": entry_data.get("monitored", None),
-            "how_long_ago": entry_data.get("how_long_ago", how_long_ago)  # Use calculated value or provided value
+            "monitored": entry_data.get("monitored", None)
         }
         
         # Add app-specific fields based on the app_type
@@ -175,80 +139,85 @@ class HuntingManager:
             entry.update({
                 "quality": entry_data.get("quality", None),
                 "size_mb": entry_data.get("size_mb", None),
-                "protocol": entry_data.get("protocol", None),
-                "indexer": entry_data.get("indexer", None),
-                "release_group": entry_data.get("release_group", None),
-                "year": entry_data.get("year", None),
-                "tmdb_id": entry_data.get("tmdb_id", None),
-                "imdb_id": entry_data.get("imdb_id", None),
+                "protocol": entry_data.get("protocol", None), 
+                "year": entry_data.get("year", None)
             })
+            # Only add IDs if they exist
+            if "imdb_id" in entry_data:
+                entry["imdb_id"] = entry_data["imdb_id"]
+            if "tmdb_id" in entry_data:
+                entry["tmdb_id"] = entry_data["tmdb_id"]
+                
         elif app_type == "sonarr":
-            # TV-specific fields
+            # Series-specific fields
             entry.update({
                 "quality": entry_data.get("quality", None),
                 "size_mb": entry_data.get("size_mb", None),
                 "protocol": entry_data.get("protocol", None),
-                "indexer": entry_data.get("indexer", None),
-                "release_group": entry_data.get("release_group", None),
                 "season": entry_data.get("season", None),
-                "episode": entry_data.get("episode", None),
-                "tvdb_id": entry_data.get("tvdb_id", None),
+                "episode": entry_data.get("episode", None)
             })
+            # Only add IDs if they exist
+            if "tvdb_id" in entry_data:
+                entry["tvdb_id"] = entry_data["tvdb_id"]
+                
         elif app_type == "lidarr":
             # Music-specific fields
             entry.update({
                 "quality": entry_data.get("quality", None),
                 "size_mb": entry_data.get("size_mb", None),
-                "protocol": entry_data.get("protocol", None),
-                "indexer": entry_data.get("indexer", None),
                 "artist": entry_data.get("artist", None),
-                "album": entry_data.get("album", None),
-                "release_date": entry_data.get("release_date", None),
+                "album": entry_data.get("album", None)
             })
+            
         elif app_type == "readarr":
             # Book-specific fields
             entry.update({
                 "quality": entry_data.get("quality", None),
                 "size_mb": entry_data.get("size_mb", None),
-                "protocol": entry_data.get("protocol", None),
-                "indexer": entry_data.get("indexer", None),
                 "author": entry_data.get("author", None),
-                "book": entry_data.get("book", None),
-                "release_date": entry_data.get("release_date", None),
-                "isbn": entry_data.get("isbn", None),
+                "book": entry_data.get("book", None)
             })
             
-        # Write to history file
+        # Add indexer if provided (useful for all types)
+        if "indexer" in entry_data:
+            entry["indexer"] = entry_data["indexer"]
+        
         history_file = self.get_history_file_path(app_type, instance_name)
+        independent_logger.debug(f"Writing to history file: {history_file}")
         
-        # Create parent directory if it doesn't exist
-        history_file.parent.mkdir(parents=True, exist_ok=True)
+        # Make sure the parent directory exists
+        history_file.parent.mkdir(exist_ok=True, parents=True)
         
-        # Use a lock to prevent race conditions
+        # Thread-safe file operation
         with history_locks[app_type]:
             try:
-                entries = []
-                
-                # Read existing entries if file exists
                 if history_file.exists():
                     with open(history_file, 'r') as f:
-                        entries = json.load(f)
+                        history_data = json.load(f)
+                else:
+                    history_data = []
+                    
+                # Check for duplicates based on ID and operation_type
+                # Only allow one entry per ID per operation type
+                for existing_entry in history_data:
+                    if (str(existing_entry.get("id")) == str(entry["id"]) and 
+                        existing_entry.get("operation_type") == entry["operation_type"]):
+                        independent_logger.debug(f"Duplicate entry found for {app_type}-{instance_name} ID {entry['id']} with operation {entry['operation_type']}")
+                        return None
                 
-                # Add new entry at the beginning
-                entries.insert(0, entry)
+                # Add new entry at the beginning for most recent first
+                history_data.insert(0, entry)
                 
-                # Write entries back to file
+                # Write back to file
                 with open(history_file, 'w') as f:
-                    json.dump(entries, f, indent=2)
+                    json.dump(history_data, f, indent=2)
                 
-                # Use independent logger that doesn't rely on Flask application context
-                independent_logger.info(f"Added history entry for {app_type} ID: {entry['id']}, Status: {entry['hunt_status']}")
-                    
+                independent_logger.info(f"Added history entry for {app_type}-{instance_name}: {entry_data['name']}")
                 return entry
+                
             except Exception as e:
-                # Use independent logger for error logging
                 independent_logger.error(f"Error adding history entry: {str(e)}")
-                    
                 return None
                 
     def update_history_entry_status(self, app_type: str, instance_name: str, item_id: str, 
@@ -354,42 +323,16 @@ class HuntingManager:
     
     def get_history(self, app_type: str, instance_name: Optional[str] = None, 
                    page: int = 1, page_size: int = 50) -> Dict[str, Any]:
-        """
-        Get the history entries for a specific app type and instance
-        
-        Parameters:
-        - app_type: str - The app type (sonarr, radarr, etc)
-        - instance_name: str - Optional name of the instance, if None will return entries for all instances
-        - page: int - Page number for pagination (1-based)
-        - page_size: int - Number of entries per page
-        
-        Returns:
-            Dictionary with pagination info and items:
-            {
-                "total": int - Total number of entries,
-                "page": int - Current page,
-                "page_size": int - Number of entries per page,
-                "total_pages": int - Total number of pages,
-                "items": list - List of history entries
-            }
-        """
-        if not self.ensure_history_dir():
-            logger.error("Could not ensure history directory exists")
-            return {"total": 0, "page": page, "page_size": page_size, "total_pages": 0, "items": []}
-        
-        # Check page and page_size parameters
-        if page < 1:
-            page = 1
-        if page_size < 1:
-            page_size = 1
-        if page_size > 1000:
-            page_size = 1000
+        """Get history entries with pagination."""
+        # Validate app type
+        if app_type not in history_locks and app_type != "all":
+            independent_logger.error(f"Invalid app type: {app_type}")
+            return {"error": "Invalid app type"}
             
-        # Calculate start and end indices for pagination
+        # Calculate pagination
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         
-        # Get all history entries
         all_entries = []
         
         try:
@@ -426,8 +369,26 @@ class HuntingManager:
             # Get the entries for the current page
             page_entries = all_entries[start_idx:end_idx]
             
-            # The how_long_ago field is now permanently set at entry creation time
-            # and is not recalculated here
+            # Calculate how_long_ago for each entry
+            current_time = int(time.time())
+            for entry in page_entries:
+                entry_time = entry.get("date_time", 0)
+                seconds_elapsed = current_time - entry_time
+                
+                if seconds_elapsed < 60:
+                    entry["how_long_ago"] = "Just now"
+                elif seconds_elapsed < 3600:  # Less than an hour
+                    minutes = int(seconds_elapsed / 60)
+                    entry["how_long_ago"] = f"{minutes} {'minute' if minutes == 1 else 'minutes'} ago"
+                elif seconds_elapsed < 86400:  # Less than a day
+                    hours = int(seconds_elapsed / 3600)
+                    entry["how_long_ago"] = f"{hours} {'hour' if hours == 1 else 'hours'} ago"
+                elif seconds_elapsed < 604800:  # Less than a week
+                    days = int(seconds_elapsed / 86400)
+                    entry["how_long_ago"] = f"{days} {'day' if days == 1 else 'days'} ago"
+                else:
+                    # More than a week, show the actual date
+                    entry["how_long_ago"] = datetime.fromtimestamp(entry_time).strftime('%Y-%m-%d')
             
             return {
                 "total": total,
