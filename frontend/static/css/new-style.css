@@ -306,6 +306,11 @@ input:checked + .slider:before {
     display: block;
 }
 
+#historySection.active {
+    display: flex;
+    flex-direction: column;
+}
+
 /* Cards */
 .dashboard-grid {
     display: grid;
