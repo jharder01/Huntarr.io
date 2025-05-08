@@ -49,8 +49,7 @@ def process_cutoff_upgrades(
     command_wait_attempts = get_advanced_setting("command_wait_attempts", 600)
 
     # General Lidarr settings (also from app_settings)
-    # Get setting using old name (hunt_upgrade_items) for backward compatibility, but refer to it as search_upgrade_items
-    search_upgrade_items = app_settings.get("hunt_upgrade_items", 0)
+    hunt_upgrade_items = app_settings.get("hunt_upgrade_items", 0)
     monitored_only = app_settings.get("monitored_only", True)
 
     lidarr_logger.info(f"Using API timeout of {api_timeout} seconds for Lidarr upgrades")
@@ -64,13 +63,13 @@ def process_cutoff_upgrades(
         lidarr_logger.error(f"Missing API URL or Key for instance '{instance_name}'. Cannot process upgrades.")
         return False
 
-    # Check if upgrade searching is enabled
-    if search_upgrade_items <= 0:
-        lidarr_logger.info(f"'search_upgrade_items' is {search_upgrade_items} or less. Skipping upgrade processing for {instance_name}.")
+    # Check if upgrade hunting is enabled
+    if hunt_upgrade_items <= 0:
+        lidarr_logger.info(f"'hunt_upgrade_items' is {hunt_upgrade_items} or less. Skipping upgrade processing for {instance_name}.")
         return False
 
     lidarr_logger.info(f"Looking for quality upgrades for {instance_name}")
-    lidarr_logger.debug(f"Processing up to {search_upgrade_items} items for quality upgrade")
+    lidarr_logger.debug(f"Processing up to {hunt_upgrade_items} items for quality upgrade")
     
     # Reset state files if enough time has passed
     check_state_reset("lidarr")
