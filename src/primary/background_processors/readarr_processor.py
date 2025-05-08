@@ -34,11 +34,11 @@ class ReadarrProcessor(BaseProcessor):
         try:
             # Import necessary modules
             from src.primary.apps.readarr import get_configured_instances
-            from src.primary.apps.readarr.api import get_book_by_id, get_book_file, get_queue
+            from src.primary.apps.readarr.api import get_author_details, get_books_by_author_id_api, get_queue_api
             from src.primary.history_manager import get_history, update_history_entry_status, add_history_entry
             from src.primary.stateful_manager import get_processed_ids
             from src.primary.utils.field_mapper import determine_hunt_status, get_nested_value, APP_CONFIG, create_history_entry, fetch_api_data_for_item
-            from src.primary.settings_manager import settings_manager
+            from src.primary.settings_manager import get_advanced_setting
             
             # Check if Readarr is configured
             readarr_config = APP_CONFIG.get("readarr")
@@ -57,7 +57,7 @@ class ReadarrProcessor(BaseProcessor):
                 instance_name = instance.get("instance_name", "Default")
                 api_url = instance.get("api_url")
                 api_key = instance.get("api_key")
-                api_timeout = settings_manager.get_advanced_setting("api_timeout", 120)
+                api_timeout = get_advanced_setting("api_timeout", 120)
                 
                 if not api_url or not api_key:
                     self.log_warning(f"Missing API URL or key for instance: {instance_name}, skipping")
@@ -74,9 +74,9 @@ class ReadarrProcessor(BaseProcessor):
                 
                 # Create a dictionary of API handlers for easier access
                 api_handlers = {
-                    "get_book_by_id": lambda id: get_book_by_id(api_url, api_key, id, api_timeout),
-                    "get_book_file": lambda id: get_book_file(api_url, api_key, id, api_timeout),
-                    "get_queue": lambda: get_queue(api_url, api_key, api_timeout)
+                    "get_author_by_id": lambda id: get_author_details(api_url, api_key, id, api_timeout),
+                    "get_books_by_author_id": lambda id: get_books_by_author_id_api(api_url, api_key, id, api_timeout),
+                    "get_queue": lambda: get_queue_api(api_url, api_key, api_timeout)
                 }
                 
                 # Get queue data once for all books to avoid multiple API calls
@@ -88,100 +88,70 @@ class ReadarrProcessor(BaseProcessor):
                     self.log_error(f"Error fetching download queue for {instance_name}: {e}")
                     queue_data = []
                 
-                # Process each book ID
+                # Process each author ID
                 processed_count = 0
-                for book_id in processed_ids:
+                for author_id_str in processed_ids:
                     # Skip processing if stop event is set
                     if stop_event.is_set():
                         return
                         
+                    author_id = int(author_id_str)
                     processed_count += 1
-                    self.log_info(f"Processing book ID: {book_id} ({processed_count}/{len(processed_ids)}) for instance {instance_name}")
+                    self.log_info(f"Processing author ID: {author_id} ({processed_count}/{len(processed_ids)}) for instance {instance_name}")
                     
                     try:
                         # Use the unified field handler to fetch all needed data
-                        primary_data, file_data, _ = fetch_api_data_for_item("readarr", book_id, api_handlers)
+                        primary_data, book_list_data, _ = fetch_api_data_for_item("readarr", author_id, api_handlers)
                         
                         if not primary_data:
-                            self.log_warning(f"No data returned from API for book ID {book_id}, skipping")
+                            self.log_warning(f"No primary data (author details) returned from API for author ID {author_id}, skipping")
                             continue
                         
-                        # Log basic details
-                        title = primary_data.get('title', 'Unknown')
-                        author = primary_data.get('author', {}).get('authorName', 'Unknown')
-                        has_file = primary_data.get('hasFile', False)
+                        # Log basic details for the author
+                        author_name = primary_data.get('authorName', 'Unknown Author')
                         monitored = primary_data.get('monitored', False)
                         
-                        self.log_info(f"Book details - ID: {book_id}, Title: {title}, "
-                                     f"Author: {author}, Status: {'Downloaded' if has_file else 'Missing'}, "
-                                     f"Monitored: {monitored}")
-                        
-                        # Check if book is in queue
-                        book_in_queue = False
-                        queue_item_data = None
-                        if queue_data:
-                            for queue_item in queue_data:
-                                if queue_item.get('bookId') == int(book_id):
-                                    book_in_queue = True
-                                    queue_item_data = queue_item
-                                    progress = queue_item.get('progress', 0)
-                                    status = queue_item.get('status', 'Unknown')
-                                    protocol = queue_item.get('protocol', 'Unknown')
-                                    self.log_info(f"Book in download queue - ID: {book_id}, Title: {title}, "
-                                                f"Progress: {progress}%, Status: {status}, Protocol: {protocol}")
-                                    break
-                        
-                        if not book_in_queue and not has_file and monitored:
-                            self.log_info(f"Book not in download queue and not downloaded - "
-                                        f"ID: {book_id}, Title: {title}, Monitored: {monitored}")
-                        
+                        self.log_info(f"Author details - ID: {author_id}, Name: {author_name}, Monitored: {monitored}")
+
                         # Determine hunt status
                         hunt_status = determine_hunt_status("readarr", primary_data, queue_data)
                         
-                        # Check if this book is already in history
+                        # Check if this author is already in history
                         existing_entry = None
                         if history_data.get("entries"):
                             existing_entry = next((entry for entry in history_data["entries"] 
-                                                if str(entry.get("id", "")) == str(book_id)), None)
+                                                if str(entry.get("id", "")) == str(author_id)), None)
                         
-                        # Update or create history entry
+                        # Update or create history entry for the AUTHOR
                         if existing_entry:
-                            # Just update the status if it exists
-                            update_history_entry_status("readarr", instance_name, book_id, hunt_status)
-                            
-                            # Log status changes
+                            update_history_entry_status("readarr", instance_name, author_id, hunt_status)
                             previous_status = existing_entry.get("hunt_status", "Not Tracked")
                             if previous_status != hunt_status:
-                                self.log_info(f"Updating status for book ID {book_id} from '{previous_status}' to '{hunt_status}'")
+                                self.log_info(f"Updating status for author ID {author_id} from '{previous_status}' to '{hunt_status}'")
                             else:
-                                self.log_info(f"Status unchanged for book ID {book_id}: '{hunt_status}'")
+                                self.log_info(f"Status unchanged for author ID {author_id}: '{hunt_status}'")
                         else:
-                            # Create a new history entry with the unified approach
-                            entry_data = create_history_entry("readarr", instance_name, book_id, 
-                                                           primary_data, file_data, queue_data)
+                            entry_data = create_history_entry("readarr", instance_name, str(author_id), 
+                                                           primary_data, file_data=book_list_data, queue_data=queue_data)
                             
-                            # Add required name field for history_manager
-                            entry_data["name"] = f"{author} - {title}"
+                            entry_data["name"] = primary_data.get('authorName', 'Unknown Author')
                             
-                            # Add the entry to history
                             add_history_entry("readarr", entry_data)
-                            self.log_info(f"Created new history entry for book ID {book_id}: {hunt_status}")
+                            self.log_info(f"Created new history entry for author ID {author_id}: {hunt_status}")
                         
-                        # Track book in memory
-                        book_info = {
-                            "id": book_id,
-                            "title": title,
-                            "author": author,
+                        # Track author in memory
+                        author_info = {
+                            "id": author_id,
+                            "authorName": author_name,
                             "status": hunt_status,
                             "instance_name": instance_name
                         }
                         
-                        # Add to tracking or update
-                        self.hunting_manager.track_book(book_id, instance_name, book_info)
-                        self.log_info(f"Book ID {book_id} is now tracked for instance {instance_name}, status: {hunt_status}")
+                        self.hunting_manager.track_item("readarr", author_id, instance_name, author_info)
+                        self.log_info(f"Author ID {author_id} is now tracked for instance {instance_name}, status: {hunt_status}")
                         
                     except Exception as e:
-                        self.log_error(f"Error processing book ID {book_id}: {e}")
+                        self.log_error(f"Error processing author ID {author_id}: {e}")
                         continue
                 
                 self.log_info(f"Processed {processed_count} items for {instance_name}")

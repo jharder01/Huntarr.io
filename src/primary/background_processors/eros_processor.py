@@ -34,11 +34,11 @@ class ErosProcessor(BaseProcessor):
         try:
             # Import necessary modules
             from src.primary.apps.eros import get_configured_instances
-            from src.primary.apps.eros.api import get_movie_by_id, get_movie_file, get_download_queue
+            from src.primary.apps.eros.api import get_movie_by_id, get_movie_file, get_queue
             from src.primary.history_manager import get_history, update_history_entry_status, add_history_entry
             from src.primary.stateful_manager import get_processed_ids
             from src.primary.utils.field_mapper import determine_hunt_status, get_nested_value, APP_CONFIG, create_history_entry, fetch_api_data_for_item
-            from src.primary.settings_manager import settings_manager
+            from src.primary.settings_manager import get_advanced_setting
             
             # Check if Eros is configured
             eros_config = APP_CONFIG.get("eros")
@@ -57,7 +57,7 @@ class ErosProcessor(BaseProcessor):
                 instance_name = instance.get("instance_name", "Default")
                 api_url = instance.get("api_url")
                 api_key = instance.get("api_key")
-                api_timeout = settings_manager.get_advanced_setting("api_timeout", 120)
+                api_timeout = get_advanced_setting("api_timeout", 120)
                 
                 if not api_url or not api_key:
                     self.log_warning(f"Missing API URL or key for instance: {instance_name}, skipping")
@@ -76,14 +76,18 @@ class ErosProcessor(BaseProcessor):
                 api_handlers = {
                     "get_movie_by_id": lambda id: get_movie_by_id(api_url, api_key, id, api_timeout),
                     "get_movie_file": lambda id: get_movie_file(api_url, api_key, id, api_timeout),
-                    "get_download_queue": lambda: get_download_queue(api_url, api_key, api_timeout)
+                    "get_queue": lambda: get_queue(api_url, api_key, api_timeout)
                 }
                 
                 # Get queue data once for all movies to avoid multiple API calls
                 queue_data = None
                 try:
-                    queue_data = api_handlers["get_download_queue"]()
-                    self.log_info(f"Current download queue has {len(queue_data)} items for instance {instance_name}")
+                    queue_data = api_handlers["get_queue"]()
+                    if queue_data is not None:
+                        self.log_info(f"Current download queue has {len(queue_data)} items for instance {instance_name}")
+                    else:
+                        self.log_info(f"Current download queue is empty or failed to fetch for instance {instance_name}")
+                        queue_data = [] # Ensure queue_data is a list
                 except Exception as e:
                     self.log_error(f"Error fetching download queue for {instance_name}: {e}")
                     queue_data = []

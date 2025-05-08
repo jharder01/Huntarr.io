@@ -22,6 +22,19 @@ class RadarrProcessor(BaseProcessor):
         super().__init__("radarr")
         self.hunting_manager = hunting_manager
     
+    def _log_api_call(self, func_name, item_id, func):
+        """Log an API call and its result for debugging"""
+        id_str = f" for ID {item_id}" if item_id else ""
+        self.log_info(f"[API CALL] {func_name}{id_str}")
+        result = func()
+        if result:
+            result_type = type(result).__name__
+            result_summary = f"{result_type} with {len(result)} items" if isinstance(result, (list, dict)) else result_type
+            self.log_info(f"[API RESULT] {func_name}{id_str}: {result_summary}")
+        else:
+            self.log_info(f"[API RESULT] {func_name}{id_str}: No data returned")
+        return result
+            
     def _process_implementation(self, stop_event) -> None:
         """
         Process Radarr-specific hunting logic using the unified field handling approach.
@@ -38,7 +51,7 @@ class RadarrProcessor(BaseProcessor):
             from src.primary.history_manager import get_history, update_history_entry_status, add_history_entry
             from src.primary.stateful_manager import get_processed_ids
             from src.primary.utils.field_mapper import determine_hunt_status, get_nested_value, APP_CONFIG, create_history_entry, fetch_api_data_for_item
-            from src.primary.settings_manager import settings_manager
+            from src.primary.settings_manager import get_advanced_setting
             
             # Check if Radarr is configured
             radarr_config = APP_CONFIG.get("radarr")
@@ -47,7 +60,12 @@ class RadarrProcessor(BaseProcessor):
                 return
             
             # Get all configured Radarr instances
+            self.log_info("Fetching configured Radarr instances...")
             radarr_instances = get_configured_instances()
+            self.log_info(f"Found {len(radarr_instances)} Radarr instance(s)")
+            
+            # Enable more verbose logging for debugging
+            self.set_debug(True)
             
             for instance in radarr_instances:
                 # Skip processing if stop event is set
@@ -57,7 +75,7 @@ class RadarrProcessor(BaseProcessor):
                 instance_name = instance.get("instance_name", "Default")
                 api_url = instance.get("api_url")
                 api_key = instance.get("api_key")
-                api_timeout = settings_manager.get_advanced_setting("api_timeout", 120)
+                api_timeout = get_advanced_setting("api_timeout", 120)
                 
                 if not api_url or not api_key:
                     self.log_warning(f"Missing API URL or key for instance: {instance_name}, skipping")
@@ -73,11 +91,14 @@ class RadarrProcessor(BaseProcessor):
                 history_data = get_history("radarr", instance_name)
                 
                 # Create a dictionary of API handlers for easier access
+                self.log_info(f"Setting up API handlers for Radarr instance: {instance_name} ({api_url})")
                 api_handlers = {
-                    "get_movie_by_id": lambda id: get_movie_by_id(api_url, api_key, id, api_timeout),
-                    "get_movie_file": lambda id: get_movie_file(api_url, api_key, id, api_timeout),
-                    "get_download_queue": lambda: get_download_queue(api_url, api_key, api_timeout)
+                    "get_movie_by_id": lambda id: self._log_api_call("get_movie_by_id", id, lambda: get_movie_by_id(api_url, api_key, id, api_timeout)),
+                    "get_movie_file": lambda id: self._log_api_call("get_movie_file", id, lambda: get_movie_file(api_url, api_key, id, api_timeout)),
+                    "get_download_queue": lambda: self._log_api_call("get_download_queue", None, lambda: get_download_queue(api_url, api_key, api_timeout))
                 }
+                
+                # Using the class-level _log_api_call method for API call logging
                 
                 # Get queue data once for all movies to avoid multiple API calls
                 queue_data = None
@@ -106,6 +127,12 @@ class RadarrProcessor(BaseProcessor):
                             self.log_warning(f"No data returned from API for movie ID {movie_id}, skipping")
                             continue
                         
+                        # --- DEBUG LOGGING ADDED ---
+                        self.log_info(f"[ID_DEBUG] For processed_id (movie_id var): {movie_id} (type: {type(movie_id)})")
+                        self.log_info(f"[ID_DEBUG] primary_data.get('id'): {primary_data.get('id')} (type: {type(primary_data.get('id'))})")
+                        self.log_info(f"[ID_DEBUG] primary_data.get('tmdbId'): {primary_data.get('tmdbId')} (type: {type(primary_data.get('tmdbId'))})")
+                        # --- END DEBUG LOGGING ---
+
                         # Log basic details
                         title = primary_data.get('title', 'Unknown')
                         year = primary_data.get('year', 'Unknown')

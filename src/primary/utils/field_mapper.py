@@ -22,41 +22,42 @@ logger = logging.getLogger(__name__)
 APP_CONFIG = {
     "radarr": {
         "required_fields": [
-            "id", "title", "year", "monitored", "hasFile"
+            "id", "title", "year", "monitored", "tmdbId", "hasFile"
         ],
+        "display_info": {
+            "name_format": "{title} ({year})",
+            "default_operation": "monitored",
+            "icon": "fas fa-film"
+        },
         "api_calls": {
-            "primary": "get_movie_by_id",  # Required, called first to get basic info
-            "file": {                     # Optional, called if primary indicates a file exists
+            "primary": "get_movie_by_id",
+            "file": {
                 "endpoint": "get_movie_file",
-                "condition": "hasFile",
-                "condition_value": True,
-                "id_source": "movieFile.id"
+                "match_field": "movieId"
             },
-            "queue": {                    # Always called once per batch to check queue status
+            "queue": {
                 "endpoint": "get_download_queue",
-                "match_field": "movieId"  # How to match queue items to this content type
+                "match_field": "movieId"
             }
         },
         "api_fields": {
             "get_movie_by_id": [
-                "id", "title", "year", "hasFile", "monitored", 
-                "status", "path", "sortTitle", "overview", "images",
-                "added", "movieFile", "imdbId", "tmdbId", "qualityProfileId"
+                "id", "title", "year", "status", "overview", "inCinemas", "physicalRelease", 
+                "digitalRelease", "images", "website", "youTubeTrailerId", "studio", "path", 
+                "qualityProfileId", "monitored", "minimumAvailability", "isAvailable", 
+                "folderName", "runtime", "cleanTitle", "imdbId", "tmdbId", "titleSlug", 
+                "genres", "tags", "added", "ratings", "collection", "popularity", "hasFile"
             ],
             "get_movie_file": [
-                "id", "size", "quality", "dateAdded", "mediaInfo", 
-                "originalFilePath", "relativePath", "resolution"
+                "id", "movieId", "relativePath", "path", "size", "dateAdded", "sceneName", 
+                "indexerFlags", "quality", "mediaInfo", "originalFilePath", "qualityCutoffNotMet", "languages"
             ],
             "get_download_queue": [
-                "status", "progress", "protocol", "downloadId",
-                "estimatedCompletionTime", "statusMessages", "errorMessage",
-                "size", "sizeleft", "timeleft"
+                "id", "movieId", "languages", "quality", "customFormats", "customFormatScore", "size", "title",
+                "sizeleft", "timeleft", "estimatedCompletionTime", "status", "trackedDownloadStatus",
+                "trackedDownloadState", "statusMessages", "downloadId", "protocol", "downloadClient",
+                "indexer", "outputPath"
             ]
-        },
-        "display_info": {
-            "name_format": "{title} ({year})",
-            "id_field": "id",
-            "default_operation": "monitored"
         }
     },
     
@@ -180,28 +181,30 @@ APP_CONFIG = {
         }
     },
     
-    "whisparr": {
+    "whisparr": { 
         "required_fields": [
             "id", "title", "monitored", "hasFile"
         ],
+        "display_info": {
+            "name_format": "{title}",
+            "default_operation": "monitored",
+            "icon": "fas fa-venus-mars" # Example icon
+        },
         "api_calls": {
             "primary": "get_movie_by_id",
             "file": {
                 "endpoint": "get_movie_file",
-                "condition": "hasFile",
-                "condition_value": True,
-                "id_source": "movieFile.id"
+                "match_field": "movieId" # Assuming similar to Radarr
             },
             "queue": {
                 "endpoint": "get_download_queue",
-                "match_field": "movieId"
+                "match_field": "movieId" # Assuming similar to Radarr
             }
         },
         "api_fields": {
             "get_movie_by_id": [
-                "id", "title", "hasFile", "monitored", "status",
-                "path", "overview", "images", "added", "studio",
-                "qualityProfileId", "imdbId"
+                "id", "title", "overview", "runtime", "studio", "status", "monitored", "hasFile",
+                "path", "qualityProfileId", "isAvailable", "remotePoster", "tags", "genres", "collection"
                 # Legacy Whisparr doesn't have these fields: genres, tags, collection
             ],
             "get_movie_file": [
@@ -209,15 +212,9 @@ APP_CONFIG = {
                 "originalFilePath", "relativePath", "resolution"
             ],
             "get_download_queue": [
-                "status", "progress", "protocol", "downloadId",
-                "estimatedCompletionTime", "statusMessages", "errorMessage",
-                "size", "sizeleft", "timeleft"
+                "id", "movieId", "quality", "title", "protocol", "size", "sizeleft", "status", 
+                "trackedDownloadStatus", "downloadId", "estimatedCompletionTime"
             ]
-        },
-        "display_info": {
-            "name_format": "{title}",
-            "id_field": "id",
-            "default_operation": "monitored"
         }
     },
     
@@ -225,13 +222,16 @@ APP_CONFIG = {
         "required_fields": [
             "id", "title", "monitored", "hasFile"
         ],
+        "display_info": {
+            "name_format": "{title}",
+            "default_operation": "monitored",
+            "icon": "fas fa-fire" # Example icon
+        },
         "api_calls": {
-            "primary": "get_movie_by_id", # Future Whisparr V3 (Eros branch) API structure
+            "primary": "get_movie_by_id",
             "file": {
                 "endpoint": "get_movie_file",
-                "condition": "hasFile",
-                "condition_value": True,
-                "id_source": "movieFile.id"
+                "match_field": "movieId"
             },
             "queue": {
                 "endpoint": "get_download_queue",
@@ -240,9 +240,8 @@ APP_CONFIG = {
         },
         "api_fields": {
             "get_movie_by_id": [
-                "id", "title", "hasFile", "monitored", "status",
-                "path", "overview", "images", "added", "studio",
-                "qualityProfileId", "imdbId", "genres", "tags", "collection"
+                "id", "title", "overview", "runtime", "studio", "status", "monitored", "hasFile",
+                "path", "qualityProfileId", "isAvailable", "remotePoster", "tags", "genres", "collection"
                 # Eros has additional fields over legacy Whisparr: genres, tags, collection
             ],
             "get_movie_file": [
@@ -250,15 +249,9 @@ APP_CONFIG = {
                 "originalFilePath", "relativePath", "resolution"
             ],
             "get_download_queue": [
-                "status", "progress", "protocol", "downloadId",
-                "estimatedCompletionTime", "statusMessages", "errorMessage",
-                "size", "sizeleft", "timeleft"
+                "id", "movieId", "quality", "title", "protocol", "size", "sizeleft", "status", 
+                "trackedDownloadStatus", "downloadId", "estimatedCompletionTime"
             ]
-        },
-        "display_info": {
-            "name_format": "{title}",
-            "id_field": "id",
-            "default_operation": "monitored"
         }
     },
     
@@ -287,7 +280,7 @@ APP_CONFIG = {
                 # Now includes all Eros fields since it's using the Eros API exclusively
             ],
             "get_movie_file": [
-                "id", "size", "quality", "dateAdded", "mediaInfo",
+                "id", "size", "quality", "dateAdded", "mediaInfo", 
                 "originalFilePath", "relativePath", "resolution"
             ],
             "get_download_queue": [
@@ -451,11 +444,21 @@ def create_history_entry(app_type: str, instance_name: str, item_id: str,
     
     # Create base entry with required metadata
     timestamp = int(time.time())
+    
+    # Determine the ID to be used for the history entry
+    history_entry_id = str(item_id) # Default to item_id
+    if app_type == "radarr":
+        radarr_internal_id = primary_data.get("id")
+        if radarr_internal_id is not None:
+            history_entry_id = str(radarr_internal_id)
+        else:
+            logger.warning(f"Radarr movie data for item_id {item_id} is missing the internal 'id' field. Falling back to item_id for history entry.")
+
     entry = {
         # Standard history fields
         "date_time": timestamp,
         "date_time_readable": datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S'),
-        "id": str(item_id),
+        "id": history_entry_id, # Use the determined ID
         "instance_name": instance_name,
         "app_type": app_type,
         "operation_type": app_config["display_info"].get("default_operation", "monitored"),

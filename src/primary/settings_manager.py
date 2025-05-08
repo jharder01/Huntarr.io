@@ -48,7 +48,23 @@ def get_settings_file_path(app_name: str) -> pathlib.Path:
     if app_name not in KNOWN_APP_TYPES:
         # Log a warning but allow for potential future app types
         settings_logger.warning(f"Requested settings file for unknown app type: {app_name}")
-    return SETTINGS_DIR / f"{app_name}.json"
+        
+    # First check in the settings subdirectory
+    settings_subdir_path = SETTINGS_DIR / "settings" / f"{app_name}.json"
+    
+    # Then check in the root config directory
+    root_config_path = SETTINGS_DIR / f"{app_name}.json"
+    
+    # Return whichever file exists, prioritizing the settings subdirectory
+    if settings_subdir_path.exists():
+        settings_logger.debug(f"Found {app_name} settings in /config/settings/")
+        return settings_subdir_path
+    elif root_config_path.exists():
+        settings_logger.debug(f"Found {app_name} settings in /config/")
+        return root_config_path
+    else:
+        # Default to settings subdirectory if neither exists
+        return settings_subdir_path
 
 def get_default_config_path(app_name: str) -> pathlib.Path:
     """Get the path to the default config file for a specific app."""

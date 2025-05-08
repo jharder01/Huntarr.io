@@ -515,3 +515,89 @@ def check_connection(api_url: str, api_key: str, api_timeout: int) -> bool:
     except Exception as e:
         eros_logger.error(f"Error checking connection to Whisparr V3 API: {str(e)}")
         return False
+
+def get_movie_by_id(api_url: str, api_key: str, api_timeout: int, movie_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get movie details by its ID from Eros API.
+
+    Args:
+        api_url: The base URL of the Eros API
+        api_key: The API key for authentication
+        api_timeout: Timeout for the API request
+        movie_id: The ID of the movie to fetch
+
+    Returns:
+        A dictionary containing movie details, or None if the request failed.
+    """
+    if not movie_id:
+        eros_logger.error("Movie ID is required to fetch movie details.")
+        return None
+    
+    endpoint = f"movie/{movie_id}"
+    return arr_request(api_url, api_key, api_timeout, endpoint)
+
+def get_movie_file(api_url: str, api_key: str, api_timeout: int, movie_id: int) -> Optional[Union[List[Dict[str, Any]], Dict[str, Any]]]:
+    """
+    Get movie file details for a given movie ID from Eros API.
+    It can return a list of files if multiple exist, or a single file object.
+
+    Args:
+        api_url: The base URL of the Eros API
+        api_key: The API key for authentication
+        api_timeout: Timeout for the API request
+        movie_id: The ID of the movie to fetch file details for.
+
+    Returns:
+        A dictionary or list of dictionaries containing movie file details, or None.
+    """
+    if not movie_id:
+        eros_logger.error("Movie ID is required to fetch movie file details.")
+        return None
+    endpoint = f"moviefile?movieId={movie_id}"
+    return arr_request(api_url, api_key, api_timeout, endpoint)
+
+def get_queue(api_url: str, api_key: str, api_timeout: int) -> Optional[List[Dict[str, Any]]]:
+    """
+    Get the current download queue from Eros API.
+
+    Args:
+        api_url: The base URL of the Eros API
+        api_key: The API key for authentication
+        api_timeout: Timeout for the API request
+
+    Returns:
+        A list of queue items, or None if the request failed.
+    """
+    response = arr_request(api_url, api_key, api_timeout, "queue")
+    # Eros /api/v3/queue typically returns a list of records directly or within a 'records' key based on observation of other *arr apps.
+    if response and isinstance(response, dict) and "records" in response and isinstance(response["records"], list):
+        return response["records"]
+    elif response and isinstance(response, list):
+        return response
+    return None
+
+def get_download_queue_size(api_url: str, api_key: str, api_timeout: int) -> int:
+    """
+    Get the current size of the download queue.
+
+    Args:
+        api_url: The base URL of the Eros API
+        api_key: The API key for authentication
+        api_timeout: Timeout for the API request
+
+    Returns:
+        The number of items in the download queue, or -1 if the request failed
+    """
+    response = arr_request(api_url, api_key, api_timeout, "queue")
+    
+    if response is None:
+        return -1
+    
+    # V3 API returns a list directly
+    if isinstance(response, list):
+        return len(response)
+    # Fallback to records format if needed
+    elif isinstance(response, dict) and "records" in response:
+        return len(response["records"])
+    else:
+        return -1

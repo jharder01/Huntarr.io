@@ -6,9 +6,10 @@ all the different background processors for various applications.
 """
 import logging
 from typing import Dict, List, Optional, Any
+from src.primary.utils.logger import get_logger
 
 # Create logger
-logger = logging.getLogger("processor_manager")
+logger = get_logger("processor_manager")
 
 class ProcessorManager:
     """Manages and coordinates all background processors"""
@@ -28,6 +29,7 @@ class ProcessorManager:
     def _initialize_processors(self):
         """Initialize all the supported processors"""
         try:
+            self.logger.info("[_initialize_processors] Starting processor initialization...")
             # Import all processors
             from src.primary.background_processors.radarr_processor import RadarrProcessor
             from src.primary.background_processors.sonarr_processor import SonarrProcessor
@@ -36,6 +38,7 @@ class ProcessorManager:
             from src.primary.background_processors.whisparr_processor import WhisparrProcessor
             from src.primary.background_processors.eros_processor import ErosProcessor
             from src.primary.background_processors.queue_tracker import QueueTracker
+            self.logger.info("[_initialize_processors] All processor modules imported.")
             
             # Create processor instances
             self.processors = {
@@ -45,11 +48,19 @@ class ProcessorManager:
                 "readarr": ReadarrProcessor(self.hunting_manager),
                 "whisparr": WhisparrProcessor(self.hunting_manager),
                 "eros": ErosProcessor(self.hunting_manager),
-                "queue_tracker": QueueTracker()
             }
-            self.logger.info(f"Initialized {len(self.processors)} processors")
+            self.logger.info("[_initialize_processors] Base processors initialized.")
+
+            try:
+                self.logger.info("[_initialize_processors] Attempting to instantiate QueueTracker...")
+                self.processors["queue_tracker"] = QueueTracker()
+                self.logger.info("[_initialize_processors] QueueTracker instantiated successfully.")
+            except Exception as e_qt:
+                self.logger.error(f"[_initialize_processors] FAILED to instantiate QueueTracker: {str(e_qt)}", exc_info=True)
+            
+            self.logger.info(f"[_initialize_processors] Final processor count: {len(self.processors)} processors initialized.")
         except Exception as e:
-            self.logger.error(f"Error initializing processors: {e}")
+            self.logger.error(f"[_initialize_processors] Error initializing processors: {e}", exc_info=True)
     
     def process_hunting(self, app_type: str, stop_event) -> None:
         """

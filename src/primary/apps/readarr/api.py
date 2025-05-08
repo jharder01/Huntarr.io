@@ -370,3 +370,29 @@ def search_books(api_url: str, api_key: str, book_ids: List[int], api_timeout: i
     except Exception as e:
         logger.error(f"An unexpected error occurred triggering BookSearch for book IDs {book_ids}: {e}")
         return None
+
+def get_books_by_author_id_api(api_url: str, api_key: str, author_id: int, timeout: int) -> Optional[List[Dict[str, Any]]]:
+    """
+    Get all books for a specific author.
+    Uses the generic arr_request helper.
+    """
+    if not api_url or not api_key or author_id is None:
+        logger.error("API URL, key, or author_id missing for get_books_by_author_id_api")
+        return None
+    return arr_request(f"book?authorId={author_id}", app_type="readarr", api_url=api_url, api_key=api_key, api_timeout=timeout)
+
+def get_queue_api(api_url: str, api_key: str, timeout: int) -> Optional[List[Dict[str, Any]]]:
+    """
+    Get the current download queue for Readarr.
+    Uses the generic arr_request helper and extracts the 'records' list.
+    """
+    if not api_url or not api_key:
+        logger.error("API URL or key missing for get_queue_api")
+        return None
+    response = arr_request("queue", app_type="readarr", api_url=api_url, api_key=api_key, api_timeout=timeout)
+    if response and isinstance(response, dict) and "records" in response and isinstance(response["records"], list):
+        return response["records"]
+    elif response is not None:
+        logger.warning(f"Readarr queue endpoint did not return a dict with a list of records as expected. Response: {response}")
+        return [] # Return empty list to avoid downstream errors if response structure is unexpected but not None
+    return None # arr_request failed or returned None

@@ -6,17 +6,40 @@ history entries with progress information.
 """
 import logging
 import time
+import traceback
+import os
 from typing import Dict, List, Optional, Any
-
-# Create logger
-logger = logging.getLogger("queue_tracker")
+from src.primary.utils.logger import get_logger
+import json
 
 class QueueTracker:
     """Handles queue tracking across different applications"""
     
     def __init__(self):
         """Initialize the queue tracker"""
-        self.logger = logger
+        self.logger = get_logger("queue_tracker")
+        self.logger.setLevel(logging.DEBUG)
+        self.logger.info("[QueueTracker __init__] Initializing QueueTracker with get_logger.")
+
+        # Dedicated debug logger for queue_tracker_debug.log
+        try:
+            self.logger.info("[QueueTracker __init__] Setting up debug_logger.")
+            self.debug_logger = logging.getLogger("queue_tracker_debug")
+            self.debug_logger.setLevel(logging.DEBUG)
+            debug_log_file_path = "/config/logs/queue_tracker_debug.log"
+            self.logger.info(f"[QueueTracker __init__] Attempting to create FileHandler for: {debug_log_file_path}")
+            
+            debug_file_handler = logging.FileHandler(debug_log_file_path)
+            self.logger.info(f"[QueueTracker __init__] FileHandler created for: {debug_log_file_path}")
+            
+            debug_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            debug_file_handler.setFormatter(debug_formatter)
+            self.debug_logger.addHandler(debug_file_handler)
+            self.debug_logger.propagate = False
+            self.logger.info("[QueueTracker __init__] debug_logger setup complete.")
+            self.debug_logger.info("This is a test message from debug_logger after setup.") # Test message
+        except Exception as e:
+            self.logger.error(f"[QueueTracker __init__] FAILED to set up debug_logger: {str(e)}", exc_info=True)
     
     def process(self, stop_event) -> None:
         """
@@ -25,11 +48,19 @@ class QueueTracker:
         Args:
             stop_event: Event to check if processing should stop
         """
-        self.logger.info("=== Queue tracking cycle started ===")
+        self.logger.info("=== QUEUE TRACKING CYCLE STARTED ===")
+        
         try:
             # Track queues for different applications
-            self.logger.debug("Starting Radarr queue tracking")
-            self.track_radarr_queue(stop_event)
+            self.logger.info("Starting Radarr queue tracking process")
+            
+            try:
+                self.track_radarr_queue(stop_event)
+                self.logger.info("Radarr queue tracking completed successfully")
+            except Exception as e:
+                self.logger.error(f"Error during Radarr queue tracking: {str(e)}")
+                self.debug_logger.error(f"Error during Radarr queue tracking: {str(e)}", exc_info=True) # Also log to debug with traceback
+                self.logger.debug(traceback.format_exc())
             
             self.logger.debug("Starting Sonarr queue tracking")
             self.track_sonarr_queue(stop_event)
@@ -58,6 +89,8 @@ class QueueTracker:
         """
         if stop_event.is_set():
             return
+
+        self.debug_logger.info("=== RADARR QUEUE TRACKING STARTED IN DEBUG LOGGER ===")
             
         try:
             # Import necessary modules
@@ -66,106 +99,164 @@ class QueueTracker:
             from src.primary.history_manager import get_history, update_history_entry_status
             from src.primary.utils.field_mapper import APP_CONFIG
             
+            self.debug_logger.debug("Successfully imported Radarr modules")
+            
             # Check if Radarr is configured
             radarr_config = APP_CONFIG.get("radarr")
-            if not radarr_config:
-                self.logger.debug("No configuration found for Radarr, skipping queue tracking")
+            if radarr_config:
+                self.debug_logger.debug("Radarr configuration found")
+            else:
+                self.debug_logger.warning("No Radarr configuration found, skipping queue tracking")
                 return
             
             # Get all configured Radarr instances
+            self.debug_logger.debug("Fetching configured Radarr instances")
             radarr_instances = get_configured_instances()
+            
+            self.debug_logger.info(f"Found {len(radarr_instances)} Radarr instance(s) for queue tracking")
+            for instance in radarr_instances:
+                self.debug_logger.debug(f"Instance: {instance.get('instance_name', 'Default')}")
             
             for instance in radarr_instances:
                 if stop_event.is_set():
                     return
                     
                 instance_name = instance.get("instance_name", "Default")
+                self.debug_logger.info(f"Processing queue tracking for Radarr instance: {instance_name}")
+                
                 api_url = instance.get("api_url")
                 api_key = instance.get("api_key")
-                api_timeout = 120  # Default timeout
+                api_timeout = instance.get("api_timeout", 120)
                 
                 if not api_url or not api_key:
-                    self.logger.debug(f"Missing API URL or key for Radarr instance: {instance_name}, skipping")
+                    self.debug_logger.warning(f"Missing API URL or key for Radarr instance: {instance_name}, skipping")
                     continue
                 
                 # Get history entries for this instance that are in "Searching" state
-                history_data = get_history("radarr")
+                self.debug_logger.debug(f"Fetching history entries for Radarr instance: {instance_name}")
+                history_data = get_history("radarr", instance_name)
                 if not history_data or not history_data.get("entries"):
-                    self.logger.debug(f"No history entries found for Radarr, skipping")
+                    self.debug_logger.debug(f"No history entries found for Radarr instance: {instance_name}, skipping")
                     continue
                 
+                # Filter for entries in "Searching" state for this instance
                 searching_entries = [
                     entry for entry in history_data.get("entries", [])
                     if entry.get("hunt_status") == "Searching" and 
                     entry.get("instance_name") == instance_name
                 ]
                 
+                self.debug_logger.debug(f"Found {len(searching_entries)} entries in 'Searching' state for Radarr instance: {instance_name}")
+
                 if not searching_entries:
-                    self.logger.debug(f"No searching entries for Radarr instance: {instance_name}, skipping")
+                    self.debug_logger.info(f"No 'Searching' Radarr entries to process for {instance_name}.")
                     continue
+
+                # Get queue data once for all movies to avoid multiple API calls
+                self.debug_logger.info(f"Fetching Radarr queue from {api_url} for instance {instance_name}")
                 
-                # Get queue data - was using wrong function name (get_download_queue vs get_queue)
-                self.logger.info(f"Fetching Radarr queue from {api_url} for instance {instance_name}")
-                queue_data = get_queue(api_url, api_key, api_timeout)
-                if not queue_data:
-                    self.logger.info(f"No queue data returned for Radarr instance: {instance_name}, skipping")
-                    continue
-                
-                self.logger.info(f"Checking {len(searching_entries)} entries against {len(queue_data)} queue items for Radarr")
-                
-                # Log debug details about the queue data and entries
-                if queue_data and len(queue_data) > 0:
-                    first_item = queue_data[0]
-                    self.logger.info(f"First queue item keys: {list(first_item.keys())}")
-                    self.logger.info(f"First queue item sample: movieId={first_item.get('movieId')}, title={first_item.get('title')}, status={first_item.get('status')}")
-                    
-                if searching_entries and len(searching_entries) > 0:
-                    first_entry = searching_entries[0]
-                    self.logger.info(f"First history entry: id={first_entry.get('id')}, title={first_entry.get('processed_info')}, status={first_entry.get('hunt_status')}")
-                else:
-                    self.logger.info(f"No searching entries to process for Radarr instance: {instance_name}, despite earlier check. This is unusual.")
-                
-                # Update entries with queue information
-                for entry in searching_entries:
-                    entry_id = entry.get("id")
+                queue_data = None # Initialize queue_data
+                try:
+                    queue_data = get_download_queue(api_url, api_key, api_timeout)
+                    if isinstance(queue_data, dict) and 'records' in queue_data: # Radarr v3+ returns an object with a 'records' list
+                        queue_data = queue_data.get('records', [])
+                    elif queue_data is None: # Handle case where API returns None
+                        queue_data = []
+                    # If it's already a list (older Radarr or other issue), or became an empty list, leave as is.
+                except Exception as e:
+                    self.debug_logger.error(f"Error fetching Radarr queue for instance {instance_name}: {str(e)}")
+                    # Decide if we should continue with an empty queue or skip this instance for the cycle
+                    self.debug_logger.warning(f"Skipping queue tracking for Radarr instance {instance_name} for this cycle due to API error.")
+                    continue # Skip to the next instance
+
+                if not queue_data: # If queue_data is None or empty after try-except
+                    self.debug_logger.info(f"No queue data returned or Radarr queue is empty for instance: {instance_name}")
+                    # No need to continue if there's no queue to match against, but still process entries to ensure they are handled (e.g. if they were stuck)
+                    # However, if the goal is only to match against an *active* queue, we could 'continue' here.
+                    # For now, let's assume we want to iterate entries even with an empty queue, 
+                    # as 'Searching' entries might need other updates or checks not tied to queue items.
+                    # Update: If queue is empty, no matches will be found, so it's safe to log and proceed.
+
+                self.debug_logger.info(f"Successfully fetched Radarr queue: {len(queue_data) if queue_data else 0} items for instance {instance_name}")
+
+                self.debug_logger.info(f"Checking {len(searching_entries)} history entries against {len(queue_data) if queue_data else 0} queue items for Radarr instance {instance_name}")
+
+                matches_found = 0 # Initialize here, before the loop
+                for i, entry in enumerate(searching_entries):
+                    self.debug_logger.debug(f"--- Full history entry {i+1} being processed for instance {instance_name} ---")
+                    try:
+                        self.debug_logger.debug(json.dumps(entry, indent=2))
+                    except TypeError as e:
+                        self.debug_logger.error(f"Could not serialize history entry to JSON: {e} - Entry: {entry}")
+                    self.debug_logger.debug(f"--- End of full history entry {i+1} ---")
+
+                    history_movie_id = entry.get("id")
                     title = entry.get("processed_info", "")
-                    
-                    # Find matching queue item by title (approximate match)
-                    for queue_item in queue_data:
-                        queue_title = queue_item.get("title", "")
+
+                    self.debug_logger.debug(f"Extracted for matching: HistoryEntryID='{history_movie_id}', Title='{title}'")
+
+                    match_found = False
+                    if not queue_data: # Ensure queue_data is not None before iterating
+                        self.debug_logger.debug(f"Radarr queue data is empty or None. Cannot find match for '{title}'.")
+                    else:
+                        for queue_item_idx, queue_item in enumerate(queue_data):
+                            queue_title = queue_item.get("title", "")
+                            movie_id_from_queue = queue_item.get("movieId") # This is Radarr's ID for the movie in queue
+                            
+                            self.debug_logger.debug(f"  Comparing with Queue Item {queue_item_idx + 1}: QueueMovieID='{movie_id_from_queue}', QueueTitle='{queue_title}'")
+
+                            # Match either by ID or by title matching
+                            id_match = movie_id_from_queue and str(movie_id_from_queue) == str(history_movie_id)
+                            title_match = self._title_match(title, queue_title)
+                            
+                            if id_match or title_match:
+                                match_type = "ID" if id_match else "title"
+                                self.debug_logger.info(f"Match found by {match_type} for movie '{title}'")
+                                
+                                # Calculate progress
+                                progress = 0
+                                if "size" in queue_item and "sizeleft" in queue_item and queue_item["size"] > 0:
+                                    downloaded = queue_item["size"] - queue_item["sizeleft"]
+                                    progress = round((downloaded / queue_item["size"]) * 100, 2)
+                                
+                                # Get status
+                                status = queue_item.get("status", "unknown")
+                                
+                                # Update entry with queue information
+                                new_status = f"Downloading ({progress}%)"
+                                
+                                # Create queue_info dictionary
+                                queue_info = {
+                                    "status": status,
+                                    "progress": progress,
+                                    "download_client": queue_item.get("downloadClient"),
+                                    "title": queue_title,
+                                    "time_left": queue_item.get("timeleft"),
+                                    "size": queue_item.get("size"),
+                                    "protocol": queue_item.get("protocol")
+                                }
+                                
+                                # Update the history entry
+                                self.debug_logger.info(f"Updating entry {history_movie_id} with queue status: {new_status}")
+                                self.debug_logger.debug(f"Queue info: {queue_info}")
+                                
+                                try:
+                                    update_history_entry_status("radarr", instance_name, history_movie_id, new_status, queue_info)
+                                    self.debug_logger.debug(f"History entry {history_movie_id} updated successfully")
+                                    matches_found += 1
+                                except Exception as e:
+                                    self.debug_logger.error(f"Error updating history entry {history_movie_id}: {str(e)}")
+                                
+                                match_found = True
+                                break
                         
-                        # Match either by ID or by title matching
-                        movie_id = queue_item.get("movieId")
-                        if (movie_id and str(movie_id) == str(entry_id)) or self._title_match(title, queue_title):
-                            # Calculate progress
-                            progress = 0
-                            if "size" in queue_item and "sizeleft" in queue_item and queue_item["size"] > 0:
-                                downloaded = queue_item["size"] - queue_item["sizeleft"]
-                                progress = round((downloaded / queue_item["size"]) * 100, 2)
-                            
-                            # Get status
-                            status = queue_item.get("status", "unknown")
-                            
-                            # Update entry with queue information
-                            new_status = f"Downloading ({progress}%)"
-                            
-                            queue_info = {
-                                "status": status,
-                                "progress": progress,
-                                "download_client": queue_item.get("downloadClient"),
-                                "title": queue_title,
-                                "time_left": queue_item.get("timeleft"),
-                                "size": queue_item.get("size"),
-                                "protocol": queue_item.get("protocol")
-                            }
-                            
-                            # Update the history entry
-                            self.logger.info(f"Updating entry {entry_id} with queue status: {new_status}")
-                            update_history_entry_status("radarr", instance_name, entry_id, new_status, queue_info)
-                            break
+                    if not match_found:
+                        self.debug_logger.debug(f"No matching queue item found for entry '{title}'")
+                
+                self.debug_logger.info(f"Queue matching complete: {matches_found} matches found out of {len(searching_entries)} entries")
                 
         except Exception as e:
-            self.logger.error(f"Error tracking Radarr queue: {e}")
+            self.debug_logger.error(f"Error tracking Radarr queue: {e}")
     
     def track_sonarr_queue(self, stop_event) -> None:
         """
@@ -603,6 +694,11 @@ class QueueTracker:
             from src.primary.apps.eros.api import get_download_queue
             from src.primary.history_manager import get_history, update_history_entry_status
             from src.primary.utils.field_mapper import APP_CONFIG
+        except Exception as e:
+            self.logger.error(f"Error importing modules for Eros queue tracking: {e}")
+            return
+            
+        try:
             
             # Check if Eros is configured
             eros_config = APP_CONFIG.get("eros")
@@ -632,6 +728,7 @@ class QueueTracker:
                     self.logger.debug(f"No history entries found for Eros, skipping")
                     continue
                 
+                # Get entries in Searching state
                 searching_entries = [
                     entry for entry in history_data.get("entries", [])
                     if entry.get("hunt_status") == "Searching" and 
@@ -641,16 +738,8 @@ class QueueTracker:
                 if not searching_entries:
                     self.logger.debug(f"No searching entries for Eros instance: {instance_name}, skipping")
                     continue
-                
-                # Get queue data
-                queue_data = get_download_queue(api_url, api_key, api_timeout)
-                if not queue_data:
-                    self.logger.debug(f"No queue data for Eros instance: {instance_name}, skipping")
-                    continue
-                
-                self.logger.info(f"Checking {len(searching_entries)} entries against {len(queue_data)} queue items for Eros")
-                
-                # Update entries with queue information
+                    
+                # Process each entry
                 for entry in searching_entries:
                     entry_id = entry.get("id")
                     title = entry.get("processed_info", "")

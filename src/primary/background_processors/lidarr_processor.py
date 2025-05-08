@@ -34,11 +34,11 @@ class LidarrProcessor(BaseProcessor):
         try:
             # Import necessary modules
             from src.primary.apps.lidarr import get_configured_instances
-            from src.primary.apps.lidarr.api import get_album_by_id, get_track, get_queue
+            from src.primary.apps.lidarr.api import get_albums, get_tracks, get_queue
             from src.primary.history_manager import get_history, update_history_entry_status, add_history_entry
             from src.primary.stateful_manager import get_processed_ids
             from src.primary.utils.field_mapper import determine_hunt_status, get_nested_value, APP_CONFIG, create_history_entry, fetch_api_data_for_item
-            from src.primary.settings_manager import settings_manager
+            from src.primary.settings_manager import get_advanced_setting
             
             # Check if Lidarr is configured
             lidarr_config = APP_CONFIG.get("lidarr")
@@ -57,7 +57,7 @@ class LidarrProcessor(BaseProcessor):
                 instance_name = instance.get("instance_name", "Default")
                 api_url = instance.get("api_url")
                 api_key = instance.get("api_key")
-                api_timeout = settings_manager.get_advanced_setting("api_timeout", 120)
+                api_timeout = get_advanced_setting("api_timeout", 120)
                 
                 if not api_url or not api_key:
                     self.log_warning(f"Missing API URL or key for instance: {instance_name}, skipping")
@@ -74,8 +74,8 @@ class LidarrProcessor(BaseProcessor):
                 
                 # Create a dictionary of API handlers for easier access
                 api_handlers = {
-                    "get_album_by_id": lambda id: get_album_by_id(api_url, api_key, id, api_timeout),
-                    "get_track": lambda id: get_track(api_url, api_key, id, api_timeout),
+                    "get_album_by_id": lambda id: get_albums(api_url, api_key, api_timeout, album_id=id),
+                    "get_track": lambda id: get_tracks(api_url, api_key, api_timeout, album_id=id),
                     "get_queue": lambda: get_queue(api_url, api_key, api_timeout)
                 }
                 
