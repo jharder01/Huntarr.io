@@ -1,0 +1,38 @@
+def start_huntarr():
+    """Main entry point for Huntarr background tasks."""
+    logger.info(f"--- Starting Huntarr Background Tasks v{__version__} --- ")
+
+    # Start the Hunting Manager thread
+    global hunting_manager_thread
+    if hunting_manager_thread is None or not hunting_manager_thread.is_alive():
+        logger.info("[HUNTING] Starting Hunting Manager background thread...")
+        hunting_manager_thread = threading.Thread(target=hunting_manager_loop, name="HuntingManager-Loop", daemon=True)
+        hunting_manager_thread.start()
+
+    # Perform initial settings migration if specified (e.g., via env var or arg)
+    if os.environ.get("HUNTARR_RUN_MIGRATION", "false").lower() == "true":
+        logger.info("Running settings migration from huntarr.json (if found)...")
+        settings_manager.migrate_from_huntarr_json()
+
+    # Log initial configuration for all known apps
+    for app_name in settings_manager.KNOWN_APP_TYPES: # Corrected attribute name
+        try:
+            config.log_configuration(app_name)
+        except Exception as e:
+            logger.error(f"Error logging initial configuration for {app_name}: {e}")
+
+    try:
+        # Main loop: Start and monitor app threads
+        while not stop_event.is_set():
+            start_app_threads() # Start/Restart threads for configured apps
+            # check_and_restart_threads() # This is implicitly handled by start_app_threads checking is_alive
+            stop_event.wait(15) # Check for stop signal every 15 seconds
+
+    except Exception as e:
+        logger.exception(f"Unexpected error in main monitoring loop: {e}")
+    finally:
+        logger.info("Background task main loop exited. Shutting down threads...")
+        if not stop_event.is_set():
+             stop_event.set() # Ensure stop is signaled if loop exited unexpectedly
+        shutdown_threads()
+        logger.info("--- Huntarr Background Tasks stopped --- ")

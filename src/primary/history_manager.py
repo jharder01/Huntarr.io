@@ -245,15 +245,17 @@ def format_time_ago(seconds):
     else:
         return f"{seconds} {'second' if seconds == 1 else 'seconds'} ago"
 
-def update_history_entry_status(app_type, instance_name, item_id, hunt_status):
+def update_history_entry_status(app_type, instance_name, item_id, hunt_status, queue_info=None):
     """
-    Update just the hunt status of an existing history entry, preserving the original timestamp
+    Update the hunt status and queue information of an existing history entry,
+    preserving the original timestamp
     
     Parameters:
     - app_type: str - The app type (sonarr, radarr, etc)
     - instance_name: str - Name of the instance
     - item_id: str/int - ID of the item to update
     - hunt_status: str - New hunt status to set
+    - queue_info: dict - Optional queue information with details like progress, client, etc.
     
     Returns:
     - bool - Success or failure
@@ -281,15 +283,41 @@ def update_history_entry_status(app_type, instance_name, item_id, hunt_status):
             updated = False
             for entry in history_data:
                 if str(entry.get("id", "")) == str(item_id):
-                    # Update just the hunt_status field
+                    # Update the hunt_status field
                     entry["hunt_status"] = hunt_status
+                    
+                    # Add queue information if provided
+                    if queue_info:
+                        # Update last_check timestamp
+                        entry["last_check"] = int(time.time())
+                        
+                        # Add or update queue information fields
+                        entry["queue_info"] = queue_info
+                        
+                        # For convenience, also update some top-level fields if present in queue_info
+                        if "progress" in queue_info:
+                            entry["download_progress"] = queue_info["progress"]
+                        if "protocol" in queue_info:
+                            entry["protocol"] = queue_info["protocol"]
+                        if "size" in queue_info:
+                            entry["size_mb"] = round(queue_info["size"] / (1024 * 1024), 2) if queue_info["size"] else None
+                        if "download_client" in queue_info:
+                            entry["download_client"] = queue_info["download_client"]
+                        if "quality" in queue_info:
+                            entry["quality"] = queue_info["quality"]
+                    
                     updated = True
             
             if updated:
                 # Write back to file
                 with open(history_file, 'w') as f:
                     json.dump(history_data, f, indent=2)
-                logger.info(f"Updated hunt status for {app_type}-{instance_name} ID {item_id} to '{hunt_status}'")
+                    
+                # Log appropriate message based on whether queue_info was provided
+                if queue_info:
+                    logger.info(f"Updated hunt status and queue info for {app_type}-{instance_name} ID {item_id}")
+                else:
+                    logger.info(f"Updated hunt status for {app_type}-{instance_name} ID {item_id} to '{hunt_status}'")
                 return True
             else:
                 logger.warning(f"No matching entry found for {app_type}-{instance_name} ID {item_id}")

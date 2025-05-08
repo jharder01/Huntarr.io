@@ -8,7 +8,7 @@ from src.primary.utils.history_utils import add_history_entry
 
 logger = logging.getLogger(__name__)
 
-def update_hunt_status(app_type, instance_name, item_id, item_data, queue_status=None, operation_type="missing"):
+def update_hunt_status(app_type, instance_name, item_id, item_data, queue_status=None, operation_type="missing", queue_info=None):
     """
     Update history with the current hunt status of an item
     
@@ -19,6 +19,7 @@ def update_hunt_status(app_type, instance_name, item_id, item_data, queue_status
     - item_data: dict - Item data from the API (movie, series, album, etc.)
     - queue_status: bool - Whether the item is in the download queue
     - operation_type: str - Operation type for history entry (default: "missing")
+    - queue_info: dict - Optional queue information with details like progress, client, etc.
     
     Returns:
     - str - The hunt status that was set
@@ -85,10 +86,29 @@ def update_hunt_status(app_type, instance_name, item_id, item_data, queue_status
             # We're just updating the hunt status, not creating a new history entry
             # This ensures timestamps remain based on original request time
             from src.primary.history_manager import update_history_entry_status
-            update_history_entry_status(app_type, instance_name, item_id, hunt_status)
-            logger.info(f"[HUNTING] Updated existing history entry status for {app_type} ID {item_id}: {hunt_status}")
+            update_history_entry_status(app_type, instance_name, item_id, hunt_status, queue_info)
+            
+            # Log appropriate message based on whether queue_info was provided
+            if queue_info:
+                logger.info(f"[HUNTING] Updated existing history entry status and queue info for {app_type} ID {item_id}: {hunt_status}")
+            else:
+                logger.info(f"[HUNTING] Updated existing history entry status for {app_type} ID {item_id}: {hunt_status}")
         else:
             # No existing entry found, create a new one
+            # If we have queue_info, add it to the history entry
+            if queue_info:
+                history_entry["queue_info"] = queue_info
+                if "progress" in queue_info:
+                    history_entry["download_progress"] = queue_info["progress"]
+                if "protocol" in queue_info:
+                    history_entry["protocol"] = queue_info["protocol"]
+                if "size" in queue_info:
+                    history_entry["size_mb"] = round(queue_info["size"] / (1024 * 1024), 2) if queue_info["size"] else None
+                if "download_client" in queue_info:
+                    history_entry["download_client"] = queue_info["download_client"]
+                if "quality" in queue_info:
+                    history_entry["quality"] = queue_info["quality"]
+                    
             add_history_entry(app_type, history_entry)
             logger.info(f"[HUNTING] Created new history entry with hunt status for {app_type} ID {item_id}: {hunt_status}")
         
