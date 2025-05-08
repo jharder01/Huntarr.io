@@ -311,6 +311,31 @@ input:checked + .slider:before {
     flex-direction: column;
 }
 
+/* Apps section layout - similar to history section */
+#appsSection.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Make apps container grow and fill available space */
+#appsSection.active .apps-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Prevent double scrollbars */
+}
+
+/* Ensure the active app panel within the apps section grows and scrolls */
+.app-apps-panel {
+    display: none; /* Hide all panels by default */
+}
+
+.app-apps-panel.active {
+    display: block;
+    flex-grow: 1;
+    overflow-y: auto; /* Allow scrolling within the panel if content overflows */
+}
+
 /* Cards */
 .dashboard-grid {
     display: grid;
