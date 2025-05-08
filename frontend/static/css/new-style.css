@@ -940,94 +940,283 @@ input:checked + .slider:before {
     }
 }
 
-@media (max-width: 768px) {
-    .dashboard-grid {
-        grid-template-columns: 1fr;
-    }
-    
-    .section-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    
-    .app-tabs, .settings-actions {
-        width: 100%;
-        overflow-x: auto;
-        padding-bottom: 5px; /* Prevent cut-off of button shadows */
-    }
-    
-    .app-tab, .settings-tab {
-        flex: 1;
-        white-space: nowrap;
-        min-width: 100px; /* Minimum button width */
-    }
+/* Info icon styling */
+.info-icon {
+    color: var(--info-color);
+    margin-right: 10px; /* Space between icon and title text */
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    font-size: 16px; /* Or adjust as desired */
+}
 
-    /* Layout improvements for user cards on mobile */
-    .user-card {
+/* Mobile responsiveness for info icon */
+@media (max-width: 768px) { /* Adjust breakpoint as needed */
+    .info-icon {
+        display: none !important;
+    }
+}
+
+/* Container for title and info icon in history table */
+.title-with-info {
+    display: flex;
+    align-items: center; /* Vertically align icon and title text */
+}
+
+/* Settings Section */
+.settings-actions {
+    display: flex;
+    gap: 10px;
+}
+
+.save-button, .reset-button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 0.3s;
+}
+
+.save-button {
+    background-color: var(--button-success-bg);
+    color: white;
+}
+
+.save-button:hover {
+    background-color: var(--button-success-hover);
+}
+
+.reset-button {
+    background-color: var(--button-danger-bg);
+    color: white;
+}
+
+.reset-button:hover {
+    background-color: var(--button-danger-hover);
+}
+
+.settings-form {
+    padding: 0;
+    overflow-y: auto;
+    height: calc(100vh - 150px);
+}
+
+.app-settings-panel {
+    display: none;
+}
+
+.app-settings-panel.active {
+    display: block;
+}
+
+.settings-group {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 20px;
+    margin-bottom: 20px;
+    position: relative;
+}
+
+.settings-group h3 {
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    /* border-bottom: 1px solid var(--border-color); */ /* Removed to prevent double border */
+    font-size: 1.1rem;
+}
+
+.setting-item {
+    margin-bottom: 20px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.setting-item label {
+    width: 200px;
+    font-weight: 500;
+    margin-right: 15px;
+}
+
+.setting-item input[type="text"],
+.setting-item input[type="number"],
+.setting-item input[type="password"] {
+    width: 300px;
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+}
+
+/* Make number inputs shorter where appropriate */
+.short-number-input {
+    width: 100px !important; /* Use !important to override wider default if needed */
+}
+
+/* Make number inputs for intervals shorter */
+.short-number-input {
+    width: 80px !important; /* Use !important to override potential broader input styles */
+}
+
+.setting-help {
+    width: 100%;
+    margin-top: 5px;
+    margin-left: 215px;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+/* Stateful management header row with reset button */
+.stateful-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-bottom: 10px; /* Reduced padding */
+    margin-bottom: 15px; /* Spacing below header */
+    /* border-bottom: 1px solid var(--border-color); Removed border */
+    width: 100%;
+}
+
+.stateful-header-row h3 {
+    margin: 0;
+    font-size: 1.1rem; /* Match other group headers */
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+/* Reset button styling */
+#reset_stateful_btn {
+    background-color: var(--button-danger-bg); /* Use variable */
+    color: white;
+    border: none;
+    padding: 5px 12px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: background-color 0.2s ease;
+}
+
+#reset_stateful_btn:hover {
+    background-color: var(--button-danger-hover); /* Use variable */
+}
+
+#reset_stateful_btn i {
+    font-size: 13px;
+}
+
+/* Stateful Management Section Styling */
+#generalSettings .setting-info-block {
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 15px;
+    margin-top: 0; /* Remove top margin as header row provides spacing */
+    margin-bottom: 20px;
+}
+
+#generalSettings .info-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Responsive columns */
+    gap: 15px;
+    /* margin-bottom: 15px; Removed margin, handled by parent */
+}
+
+#generalSettings .date-info-block {
+    background-color: var(--bg-secondary);
+    padding: 12px 15px; /* Adjusted padding */
+    border-radius: 4px;
+    border-left: 3px solid var(--accent-color);
+}
+
+#generalSettings .date-label {
+    font-size: 0.85em; /* Slightly smaller */
+    color: var(--text-secondary);
+    margin-bottom: 5px; /* Increased spacing */
+}
+
+#generalSettings .date-value {
+    font-size: 0.95em; /* Adjusted size */
+    font-weight: 500;
+    color: var(--text-primary);
+    font-family: inherit; /* Use standard font */
+    background-color: transparent; /* Remove background */
+    padding: 0; /* Remove padding */
+}
+
+/* Style the State Reset Interval item specifically */
+#generalSettings .setting-item input#stateful_management_hours {
+    width: 100px; /* Make input smaller */
+}
+
+#generalSettings .setting-item .reset-help {
+    color: var(--warning-color); /* Use warning color */
+    font-style: normal;
+    font-size: 0.85em;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 950px) {
+    .sidebar {
+        width: 70px;
+    }
+    
+    .sidebar h1, .nav-item span, .switch-label {
+        display: none;
+    }
+    
+    .nav-item i {
+        margin-right: 0;
+        font-size: 22px;
+    }
+    
+    .logo-container {
+        justify-content: center;
+    }
+    
+    .logo {
+        margin-right: 0;
+    }
+}
+
+@media (max-width: 992px) {
+    .settings-group {
         padding: 15px;
     }
-
-    .verification-container {
-        flex-direction: column;
-        align-items: center;
-    }
-
-    .verification-input {
+    
+    .setting-item label {
         width: 100%;
-        max-width: 200px;
-        margin-right: 0;
-        margin-bottom: 10px;
+        margin-bottom: 8px;
     }
-}
-
-/* Ensure very small screens can still access everything */
-@media (max-width: 480px) {
-    .top-bar {
-        flex-direction: column;
-        align-items: flex-start;
-        height: auto;
-        padding: 10px 15px;
+    
+    .setting-help {
+        margin-left: 0;
+    }
+    
+    .stats-grid {
+        grid-template-columns: 1fr;
     }
 
-    .user-info {
-        margin-top: 10px;
+    /* Make inputs responsive on narrow screens */
+    .setting-item input[type="text"],
+    .setting-item input[type="number"],
+    .setting-item input[type="password"] {
+        width: 100%;
+        max-width: 300px;
     }
 
-    .action-buttons {
-        flex-direction: column;
+    /* Specific width for short number inputs */
+    .setting-item input.short-number-input {
+        width: 80px; /* Adjust width as needed */
+        max-width: 80px;
     }
-
-    .action-button {
-        margin-bottom: 10px;
-    }
-}
-
-/* Footer */
-.footer {
-    text-align: center;
-    padding: 20px;
-    margin-top: 20px;
-    background-color: var(--bg-secondary);
-    border-radius: 8px;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
-    color: var(--text-secondary);
-    font-size: 14px;
-}
-
-.footer p {
-    margin: 5px 0;
-}
-
-.footer a {
-    color: var(--accent-color);
-    text-decoration: none;
-    font-weight: 500;
-    transition: color 0.3s;
-}
-
-.footer a:hover {
-    text-decoration: underline;
-    color: var(--accent-hover);
 }
 
 /* Notification styles for async operations */
@@ -1855,4 +2044,32 @@ input:checked + .slider:before {
     .hunt-status-badge {
         align-self: flex-start;
     }
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    padding: 20px;
+    margin-top: 20px;
+    background-color: var(--bg-secondary);
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    color: var(--text-secondary);
+    font-size: 14px;
+}
+
+.footer p {
+    margin: 5px 0;
+}
+
+.footer a {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+
+.footer a:hover {
+    text-decoration: underline;
+    color: var(--accent-hover);
 }
