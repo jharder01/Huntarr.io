@@ -28,15 +28,26 @@ class QueueTracker:
         self.logger.info("=== Queue tracking cycle started ===")
         try:
             # Track queues for different applications
+            self.logger.debug("Starting Radarr queue tracking")
             self.track_radarr_queue(stop_event)
+            
+            self.logger.debug("Starting Sonarr queue tracking")
             self.track_sonarr_queue(stop_event)
+            
+            self.logger.debug("Starting Lidarr queue tracking")
             self.track_lidarr_queue(stop_event)
+            
+            self.logger.debug("Starting Readarr queue tracking")
             self.track_readarr_queue(stop_event)
+            
+            self.logger.debug("Starting Whisparr queue tracking")
             self.track_whisparr_queue(stop_event)
+            
+            self.logger.debug("Starting Eros queue tracking")
             self.track_eros_queue(stop_event)
+            
         except Exception as e:
-            self.logger.error(f"Error in queue tracking: {e}")
-        self.logger.info("=== Queue tracking cycle completed ===")
+            self.logger.error(f"Error during queue tracking cycle: {e}", exc_info=True)
     
     def track_radarr_queue(self, stop_event) -> None:
         """
@@ -93,13 +104,26 @@ class QueueTracker:
                     self.logger.debug(f"No searching entries for Radarr instance: {instance_name}, skipping")
                     continue
                 
-                # Get queue data
-                queue_data = get_download_queue(api_url, api_key, api_timeout)
+                # Get queue data - was using wrong function name (get_download_queue vs get_queue)
+                self.logger.info(f"Fetching Radarr queue from {api_url} for instance {instance_name}")
+                queue_data = get_queue(api_url, api_key, api_timeout)
                 if not queue_data:
-                    self.logger.debug(f"No queue data for Radarr instance: {instance_name}, skipping")
+                    self.logger.info(f"No queue data returned for Radarr instance: {instance_name}, skipping")
                     continue
                 
                 self.logger.info(f"Checking {len(searching_entries)} entries against {len(queue_data)} queue items for Radarr")
+                
+                # Log debug details about the queue data and entries
+                if queue_data and len(queue_data) > 0:
+                    first_item = queue_data[0]
+                    self.logger.info(f"First queue item keys: {list(first_item.keys())}")
+                    self.logger.info(f"First queue item sample: movieId={first_item.get('movieId')}, title={first_item.get('title')}, status={first_item.get('status')}")
+                    
+                if searching_entries and len(searching_entries) > 0:
+                    first_entry = searching_entries[0]
+                    self.logger.info(f"First history entry: id={first_entry.get('id')}, title={first_entry.get('processed_info')}, status={first_entry.get('hunt_status')}")
+                else:
+                    self.logger.info(f"No searching entries to process for Radarr instance: {instance_name}, despite earlier check. This is unusual.")
                 
                 # Update entries with queue information
                 for entry in searching_entries:
@@ -110,8 +134,9 @@ class QueueTracker:
                     for queue_item in queue_data:
                         queue_title = queue_item.get("title", "")
                         
-                        # Check if the title matches (could be improved with fuzzy matching)
-                        if self._title_match(title, queue_title):
+                        # Match either by ID or by title matching
+                        movie_id = queue_item.get("movieId")
+                        if (movie_id and str(movie_id) == str(entry_id)) or self._title_match(title, queue_title):
                             # Calculate progress
                             progress = 0
                             if "size" in queue_item and "sizeleft" in queue_item and queue_item["size"] > 0:
@@ -318,7 +343,8 @@ class QueueTracker:
                     # Find matching queue item by artist ID
                     for queue_item in queue_data:
                         artist_id = queue_item.get("artistId")
-                        if artist_id and str(artist_id) == str(entry_id):
+                        queue_title = queue_item.get("title", "")
+                        if (artist_id and str(artist_id) == str(entry_id)) or self._title_match(title, queue_title):
                             # Calculate progress
                             progress = 0
                             if "size" in queue_item and "sizeleft" in queue_item and queue_item["size"] > 0:
@@ -423,7 +449,8 @@ class QueueTracker:
                     # Find matching queue item by author ID
                     for queue_item in queue_data:
                         author_id = queue_item.get("authorId")
-                        if author_id and str(author_id) == str(entry_id):
+                        queue_title = queue_item.get("title", "")
+                        if (author_id and str(author_id) == str(entry_id)) or self._title_match(title, queue_title):
                             # Calculate progress
                             progress = 0
                             if "size" in queue_item and "sizeleft" in queue_item and queue_item["size"] > 0:
@@ -669,7 +696,7 @@ class QueueTracker:
     
     def _title_match(self, history_title: str, queue_title: str) -> bool:
         """
-        Check if two titles match (simple version).
+        Check if two titles match with enhanced matching logic.
         
         Args:
             history_title: Title from history entry
@@ -678,23 +705,63 @@ class QueueTracker:
         Returns:
             True if titles match, False otherwise
         """
-        # Remove year and clean up titles for comparison
+        # Immediately return if either title is empty
         if not history_title or not queue_title:
             return False
             
-        # Clean up by removing common patterns
+        # Import here to avoid circular dependencies
         import re
+        
+        # Log the titles we're comparing for debugging
+        self.logger.debug(f"Comparing titles: '{history_title}' <-> '{queue_title}'")
+        
+        # 1. Clean both titles
         # Remove year patterns like (2023) or [2023]
         history_title = re.sub(r'[\(\[\{]\d{4}[\)\]\}]', '', history_title)
         queue_title = re.sub(r'[\(\[\{]\d{4}[\)\]\}]', '', queue_title)
+        
+        # Remove season/episode patterns like S01E01 or s01e01
+        history_title = re.sub(r'\b[Ss]\d{1,2}[Ee]\d{1,2}\b', '', history_title)
+        queue_title = re.sub(r'\b[Ss]\d{1,2}[Ee]\d{1,2}\b', '', queue_title)
         
         # Remove special characters and convert to lowercase
         history_title_clean = re.sub(r'[^\w\s]', '', history_title).lower().strip()
         queue_title_clean = re.sub(r'[^\w\s]', '', queue_title).lower().strip()
         
-        # Check for exact match after cleaning
+        # Remove common words like "the", "a", etc. that might cause false negatives
+        common_words = ['the', 'a', 'an', 'of', 'in', 'on', 'at', 'by', 'for', 'with']
+        for word in common_words:
+            history_title_clean = re.sub(r'\b' + word + r'\b', '', history_title_clean)
+            queue_title_clean = re.sub(r'\b' + word + r'\b', '', queue_title_clean)
+        
+        # Remove multiple spaces
+        history_title_clean = re.sub(r'\s+', ' ', history_title_clean).strip()
+        queue_title_clean = re.sub(r'\s+', ' ', queue_title_clean).strip()
+        
+        self.logger.debug(f"Cleaned titles: '{history_title_clean}' <-> '{queue_title_clean}'")
+        
+        # 2. Check for exact match after cleaning
         if history_title_clean == queue_title_clean:
+            self.logger.debug("Title match: exact match")
+            return True
+        
+        # 3. Check if one is a substring of the other (handles partial titles)
+        if history_title_clean in queue_title_clean or queue_title_clean in history_title_clean:
+            self.logger.debug("Title match: substring match")
+            return True
+        
+        # 4. Check for word-level similarity (>50% of words match)
+        history_words = set(history_title_clean.split())
+        queue_words = set(queue_title_clean.split())
+        
+        if not history_words or not queue_words:
+            return False
+            
+        common_words = history_words.intersection(queue_words)
+        similarity_ratio = len(common_words) / max(len(history_words), len(queue_words))
+        
+        if similarity_ratio > 0.5:  # If more than 50% of words match
+            self.logger.debug(f"Title match: word similarity {similarity_ratio:.2f}")
             return True
             
-        # Check if one is a substring of the other
-        return history_title_clean in queue_title_clean or queue_title_clean in history_title_clean
+        return False
