@@ -91,12 +91,12 @@ const SettingsForms = {
                     <p class="setting-help">How to search for missing Sonarr content (Season Packs recommended for torrent users)</p>
                 </div>
                 <div class="setting-item">
-                    <label for="sonarr-hunt-missing-items">Missing Items to Search:</label>
+                    <label for="sonarr-hunt-missing-items">Missing Items to Process:</label>
                     <input type="number" id="sonarr-hunt-missing-items" name="hunt_missing_items" min="0" value="${settings.hunt_missing_items !== undefined ? settings.hunt_missing_items : 1}">
                     <p class="setting-help">Number of missing items to search per cycle (0 to disable)</p>
                 </div>
                 <div class="setting-item">
-                    <label for="sonarr-hunt-upgrade-items">Upgrade Items to Search:</label>
+                    <label for="sonarr-hunt-upgrade-items">Upgrade Items to Process:</label>
                     <input type="number" id="sonarr-hunt-upgrade-items" name="hunt_upgrade_items" min="0" value="${settings.hunt_upgrade_items !== undefined ? settings.hunt_upgrade_items : 0}">
                     <p class="setting-help">Number of episodes to upgrade per cycle (0 to disable)</p>
                 </div>

@@ -89,7 +89,7 @@ def add_history_entry(app_type, entry_data):
         "instance_name": instance_name,  # Use the instance_name we extracted above
         "operation_type": entry_data.get("operation_type", "missing"),  # Default to "missing" if not specified
         "app_type": app_type,  # Include app_type in the entry for display in UI
-        "hunt_status": entry_data.get("hunt_status", "Not Tracked"),  # Add hunt status field
+        "search_status": entry_data.get("search_status", "Not Tracked"),  # Add search status field
         
         # Additional metadata fields with default values
         "quality": entry_data.get("quality", None),
@@ -251,7 +251,7 @@ def format_time_ago(seconds):
     else:
         return f"{seconds} {'second' if seconds == 1 else 'seconds'} ago"
 
-def update_history_entry_status(app_type, instance_name, item_id, hunt_status):
+def update_history_entry_status(app_type, instance_name, item_id, search_status):
     """
     Update just the hunt status of an existing history entry, preserving the original timestamp
     
@@ -259,7 +259,7 @@ def update_history_entry_status(app_type, instance_name, item_id, hunt_status):
     - app_type: str - The app type (sonarr, radarr, etc)
     - instance_name: str - Name of the instance
     - item_id: str/int - ID of the item to update
-    - hunt_status: str - New hunt status to set
+    - search_status: str - New search status to set
     
     Returns:
     - bool - Success or failure
@@ -287,15 +287,15 @@ def update_history_entry_status(app_type, instance_name, item_id, hunt_status):
             updated = False
             for entry in history_data:
                 if str(entry.get("id", "")) == str(item_id):
-                    # Update just the hunt_status field
-                    entry["hunt_status"] = hunt_status
+                    # Update just the search_status field
+                    entry["search_status"] = search_status
                     updated = True
             
             if updated:
                 # Write back to file
                 with open(history_file, 'w') as f:
                     json.dump(history_data, f, indent=2)
-                logger.info(f"Updated hunt status for {app_type}-{instance_name} ID {item_id} to '{hunt_status}'")
+                logger.info(f"Updated search status for {app_type}-{instance_name} ID {item_id} to '{search_status}'")
                 return True
             else:
                 logger.warning(f"No matching entry found for {app_type}-{instance_name} ID {item_id}")

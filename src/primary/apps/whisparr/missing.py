@@ -132,7 +132,7 @@ def process_missing_items(
     processing_done = False
     
     # Select items to search based on configuration
-    whisparr_logger.info(f"Randomly selecting up to {hunt_missing_items} missing items.")
+    whisparr_logger.info(f"Randomly selecting up to {hunt_missing_items} missing items for search.")
     items_to_search = random.sample(unprocessed_items, min(len(unprocessed_items), hunt_missing_items))
     
     whisparr_logger.info(f"Selected {len(items_to_search)} missing items to search.")
@@ -147,7 +147,7 @@ def process_missing_items(
         # Re-check limit in case it changed
         current_limit = app_settings.get("hunt_missing_items", app_settings.get("hunt_missing_scenes", 1))
         if items_processed >= current_limit:
-             whisparr_logger.info(f"Reached HUNT_MISSING_ITEMS limit ({current_limit}) for this cycle.")
+             whisparr_logger.info(f"Reached search limit ({current_limit}) for this cycle.")
              break
 
         item_id = item.get("id")

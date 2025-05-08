@@ -55,7 +55,7 @@ def process_missing_movies(
     command_wait_attempts = get_advanced_setting("command_wait_attempts", 600)
     release_type = app_settings.get("release_type", "physical")
     
-    radarr_logger.info(f"Hunt Missing Movies: {hunt_missing_movies}")
+    radarr_logger.info(f"Missing Movies Limit: {hunt_missing_movies}")
     radarr_logger.info(f"Monitored Only: {monitored_only}")
     radarr_logger.info(f"Skip Future Releases: {skip_future_releases}")
     radarr_logger.info(f"Skip Movie Refresh: {skip_movie_refresh}")

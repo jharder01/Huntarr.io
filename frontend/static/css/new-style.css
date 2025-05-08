@@ -1967,21 +1967,21 @@ input:checked + .slider:before {
 }
 
 /* Hunt Status Styles */
-.hunt-status-card {
+.search-status-card {
     margin-bottom: 1rem;
 }
 
-.hunt-status-container {
+.search-status-container {
     padding: 1rem;
 }
 
-.hunt-status-list {
+.search-status-list {
     display: flex;
     flex-direction: column;
     gap: 1rem;
 }
 
-.hunt-status-item {
+.search-status-item {
     background: var(--card-bg);
     border: 1px solid var(--border-color);
     border-radius: 8px;
@@ -1989,78 +1989,78 @@ input:checked + .slider:before {
     transition: all 0.3s ease;
 }
 
-.hunt-status-item:hover {
+.search-status-item:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
 }
 
-.hunt-status-header {
+.search-status-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.5rem;
 }
 
-.hunt-app-name {
+.search-app-name {
     font-weight: 600;
     color: var(--text-primary);
 }
 
-.hunt-instance-name {
+.search-instance-name {
     color: var(--text-secondary);
     font-size: 0.9rem;
 }
 
-.hunt-status-content {
+.search-status-content {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 0.5rem;
 }
 
-.hunt-media-name {
+.search-media-name {
     font-weight: 500;
     color: var(--text-primary);
 }
 
-.hunt-status-badge {
+.search-status-badge {
     padding: 0.25rem 0.75rem;
     border-radius: 12px;
     font-size: 0.85rem;
     font-weight: 500;
 }
 
-.hunt-status-badge.requested {
+.search-status-badge.requested {
     background-color: var(--warning-bg);
     color: var(--warning-text);
 }
 
-.hunt-status-badge.searching {
+.search-status-badge.searching {
     background-color: var(--info-bg);
     color: var(--info-text);
 }
 
-.hunt-status-badge.found {
+.search-status-badge.found {
     background-color: var(--success-bg);
     color: var(--success-text);
 }
 
-.hunt-status-badge.nothing-found {
+.search-status-badge.nothing-found {
     background-color: var(--error-bg);
     color: var(--error-text);
 }
 
-.hunt-status-badge.time-exceeded {
+.search-status-badge.time-exceeded {
     background-color: var(--error-bg);
     color: var(--error-text);
 }
 
-.hunt-status-badge.completed {
+.search-status-badge.completed {
     background-color: var(--success-bg);
     color: var(--success-text);
 }
 
-.hunt-status-footer {
+.search-status-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2068,7 +2068,7 @@ input:checked + .slider:before {
     color: var(--text-secondary);
 }
 
-.no-hunt-status {
+.no-search-status {
     text-align: center;
     padding: 2rem;
     color: var(--text-secondary);
@@ -2076,15 +2076,15 @@ input:checked + .slider:before {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    .hunt-status-header,
-    .hunt-status-content,
-    .hunt-status-footer {
+    .search-status-header,
+    .search-status-content,
+    .search-status-footer {
         flex-direction: column;
         gap: 0.5rem;
         align-items: flex-start;
     }
     
-    .hunt-status-badge {
+    .search-status-badge {
         align-self: flex-start;
     }
 }

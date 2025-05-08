@@ -97,7 +97,7 @@ def process_missing_books(
         return False
 
     # Always randomly select authors/books to process
-    readarr_logger.info(f"Randomly selecting up to {hunt_missing_books} authors with missing books.")
+    readarr_logger.info(f"Randomly selecting up to {hunt_missing_books} authors with missing books for search.")
     authors_to_process = random.sample(unprocessed_authors, min(hunt_missing_books, len(unprocessed_authors)))
 
     readarr_logger.info(f"Selected {len(authors_to_process)} authors to search for missing books.")
