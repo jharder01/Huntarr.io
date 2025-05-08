@@ -317,6 +317,19 @@ input:checked + .slider:before {
     flex-direction: column;
 }
 
+/* Logs section layout - matching history section */
+#logsSection.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Make logs container grow and fill available space */
+#logsSection.active #logsContainer {
+    flex-grow: 1;
+    overflow-y: auto; /* Allow scrolling within the logs container */
+    height: 0; /* This helps the flex-grow work properly */
+}
+
 /* Make apps container grow and fill available space */
 #appsSection.active .apps-container {
     flex-grow: 1;
